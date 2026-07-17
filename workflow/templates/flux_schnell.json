@@ -1,0 +1,87 @@
+{
+  "_description": "Flux.1 Schnell t2i — DualCLIPLoader (CLIP) + CheckpointLoaderSimple (MODEL from checkpoints/) + VAELoader (ae.safetensors). PLACEHOLDER placeholders get replaced by WorkflowGenerator.",
+  "_python_injects": [
+    "5.inputs.width / height = resolution",
+    "6.inputs.seed / steps / cfg = sampler params",
+    "9.inputs.filename_prefix = output prefix"
+  ],
+  "1": {
+    "inputs": {
+      "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+      "clip_name2": "clip_l.safetensors",
+      "type": "flux"
+    },
+    "class_type": "DualCLIPLoader"
+  },
+  "2": {
+    "inputs": {
+      "ckpt_name": "flux1-dev-bnb-nf4-v2.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple"
+  },
+  "3": {
+    "inputs": {
+      "clip": ["1", 0],
+      "clip_l": "PLACEHOLDER_POSITIVE",
+      "t5xxl": "PLACEHOLDER_POSITIVE",
+      "guidance": 1.0
+    },
+    "class_type": "CLIPTextEncodeFlux"
+  },
+  "4": {
+    "inputs": {
+      "clip": ["1", 0],
+      "clip_l": "PLACEHOLDER_NEGATIVE",
+      "t5xxl": "PLACEHOLDER_NEGATIVE",
+      "guidance": 1.0
+    },
+    "class_type": "CLIPTextEncodeFlux"
+  },
+  "5": {
+    "inputs": {
+      "width": 1344,
+      "height": 704,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage"
+  },
+  "6": {
+    "inputs": {
+      "seed": 0,
+      "steps": 4,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": ["2", 0],
+      "positive": ["3", 0],
+      "negative": ["4", 0],
+      "latent_image": ["5", 0]
+    },
+    "class_type": "KSampler"
+  },
+  "7": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader"
+  },
+  "8": {
+    "inputs": {
+      "samples": ["6", 0],
+      "vae": ["7", 0]
+    },
+    "class_type": "VAEDecode"
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "shot_",
+      "images": ["8", 0]
+    },
+    "class_type": "SaveImage"
+  }
+}
+
+
+
+

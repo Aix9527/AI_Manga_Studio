@@ -1,0 +1,127 @@
+{
+  "_description": "AnimateDiff-Evolved Gen2 I2V workflow (video-init approach). Encodes input image via VAE, replicates latent to N frames, then animates with motion model. Python injects: image, prompts, seed/steps/cfg, frame_count, frame_rate, filename.",
+  "_nodes": "1=CheckpointLoader, 2=LoadImage, 3=CLIP+, 4=CLIP-, 5=VAEEncode, 6=LoadMotionModel, 7=ApplyMotion, 8=UseEvolvedSampling, 9=KSampler, 10=VAEDecode, 11=VideoCombine, 12=ContextOptions, 13=LatentBatchSize",
+  "_version": "2.3",
+  "_python_injects": [
+    "1.inputs.ckpt_name = SDXL checkpoint",
+    "2.inputs.image = input image path",
+    "3.inputs.text = positive prompt",
+    "4.inputs.text = negative prompt",
+    "6.inputs.model_name = mm_sdxl_v10_beta.ckpt",
+    "9.inputs.seed / steps / cfg = sampler params",
+    "11.inputs.frame_rate = fps",
+    "11.inputs.filename_prefix = output prefix",
+    "12.inputs.context_length = frame_count",
+    "13.inputs.batch_size = frame_count"
+  ],
+  "1": {
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple"
+  },
+  "2": {
+    "inputs": {
+      "image": "",
+      "upload": "image"
+    },
+    "class_type": "LoadImage"
+  },
+  "3": {
+    "inputs": {
+      "text": "",
+      "clip": ["1", 1]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "4": {
+    "inputs": {
+      "text": "",
+      "clip": ["1", 1]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "5": {
+    "inputs": {
+      "pixels": ["2", 0],
+      "vae": ["1", 2]
+    },
+    "class_type": "VAEEncode"
+  },
+  "6": {
+    "inputs": {
+      "model_name": "mm_sdxl_v10_beta.ckpt"
+    },
+    "class_type": "ADE_LoadAnimateDiffModel"
+  },
+  "7": {
+    "inputs": {
+      "motion_model": ["6", 0],
+      "start_percent": 0.0,
+      "end_percent": 1.0
+    },
+    "class_type": "ADE_ApplyAnimateDiffModel"
+  },
+  "8": {
+    "inputs": {
+      "model": ["1", 0],
+      "beta_schedule": "autoselect",
+      "m_models": ["7", 0],
+      "context_options": ["12", 0]
+    },
+    "class_type": "ADE_UseEvolvedSampling"
+  },
+  "9": {
+    "inputs": {
+      "seed": 0,
+      "steps": 25,
+      "cfg": 7.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.85,
+      "model": ["8", 0],
+      "positive": ["3", 0],
+      "negative": ["4", 0],
+      "latent_image": ["13", 0]
+    },
+    "class_type": "KSampler"
+  },
+  "10": {
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["1", 2]
+    },
+    "class_type": "VAEDecode"
+  },
+  "11": {
+    "inputs": {
+      "images": ["10", 0],
+      "frame_rate": 8,
+      "loop_count": 0,
+      "filename_prefix": "video_",
+      "format": "image/gif",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true
+    },
+    "class_type": "VHS_VideoCombine"
+  },
+  "12": {
+    "inputs": {
+      "context_length": 48,
+      "context_stride": 1,
+      "context_overlap": 4
+    },
+    "class_type": "ADE_StandardUniformContextOptions"
+  },
+  "13": {
+    "inputs": {
+      "latent": ["5", 0],
+      "batch_size": 48,
+      "mode": "simple"
+    },
+    "class_type": "ChangeLatentBatchSize //Inspire"
+  }
+}

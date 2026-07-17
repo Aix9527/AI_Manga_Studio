@@ -1,1 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Runtime state and generated media
+database/*.db
+database/*.db-*
+logs/
+cache/
+storage/
+output/
+outputs/
+renders/
+temp/
+project/
+projects/*/artifacts/
+novels/
+
+# Large local engines and models
+comfyui/
+127.0.0.1_8188/
+models/
+workflow/downloaded/
+
+# Local brainstorming UI
+.superpowers/
+
+# Isolated implementation worktrees
 .worktrees/
+
+# Secrets and OS files
+.env
+.env.*
+!.env.example
+Thumbs.db
+.DS_Store

@@ -1,0 +1,1067 @@
+{
+  "id": "2e1c0d0e-9cee-44af-8beb-2167d872762d",
+  "revision": 0,
+  "last_node_id": 25,
+  "last_link_id": 38,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "TextInput",
+      "pos": [
+        200,
+        234
+      ],
+      "size": [
+        360,
+        140
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "📖 小说原文输入",
+      "properties": {
+        "Node name for S&R": "TextInput"
+      },
+      "widgets_values": [
+        "在此粘贴小说原文，建议单次粘贴1-3章内容，便于提取主要人物"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "TextInput",
+      "pos": [
+        200,
+        474
+      ],
+      "size": [
+        360,
+        100
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "title": "📋 人物提取规则",
+      "properties": {
+        "Node name for S&R": "TextInput"
+      },
+      "widgets_values": [
+        "从以上小说中提取所有主要人物，按姓名、性别、年龄、外貌、发型、服装、气质的格式输出，每个人物占一段，不要遗漏关键外形特征"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "TextInput",
+      "pos": [
+        197.8000000000001,
+        915.7000000000002
+      ],
+      "size": [
+        360,
+        88
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "title": "🎨 角色图视角规则",
+      "properties": {
+        "Node name for S&R": "TextInput"
+      },
+      "widgets_values": [
+        "为每个人物生成5个视角的绘图提示词：正脸头像、90度侧脸头像、45度半侧身、全身正面站姿、全身侧身站姿。保持人物外形完全一致，仅变化视角，格式为每行1条，标注人物姓名+视角"
+      ]
+    },
+    {
+      "id": 12,
+      "type": "PromptCombine",
+      "pos": [
+        1457.8000000000009,
+        915.7000000000002
+      ],
+      "size": [
+        380,
+        65
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text_a",
+          "type": "STRING",
+          "link": 6
+        },
+        {
+          "name": "text_b",
+          "type": "STRING",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "title": "🔗 角色提示词+风格合成"
+    },
+    {
+      "id": 13,
+      "type": "TextInput",
+      "pos": [
+        100,
+        2860
+      ],
+      "size": [
+        380,
+        90
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            19
+          ]
+        }
+      ],
+      "title": "🚫 通用反向提示词",
+      "properties": {
+        "Node name for S&R": "TextInput"
+      },
+      "widgets_values": [
+        "低质量,模糊,变形,畸形,多余肢体,水印,文字,崩坏,背景杂乱"
+      ]
+    },
+    {
+      "id": 17,
+      "type": "KSamplerBatch",
+      "pos": [
+        1460,
+        1872
+      ],
+      "size": [
+        340,
+        170
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 15
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 21
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 22
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 8
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT_BATCH",
+          "type": "LATENT",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "widgets_values": [
+        22,
+        7,
+        "dpmpp_2m",
+        "karras",
+        1
+      ],
+      "title": "🖼️ 批量生成角色设定图"
+    },
+    {
+      "id": 18,
+      "type": "VAEDecodeBatch",
+      "pos": [
+        200,
+        2440
+      ],
+      "size": [
+        300,
+        70
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 23
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGES",
+          "type": "IMAGE",
+          "links": [
+            24
+          ]
+        }
+      ],
+      "title": "🔓 批量图像解码"
+    },
+    {
+      "id": 19,
+      "type": "SaveImage",
+      "pos": [
+        600,
+        2440
+      ],
+      "size": [
+        300,
+        220
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "💾 保存全部角色图",
+      "properties": {},
+      "widgets_values": [
+        "角色设定图"
+      ]
+    },
+    {
+      "id": 11,
+      "type": "SwitchClip",
+      "pos": [
+        1040,
+        1382
+      ],
+      "size": [
+        220,
+        65
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip_a",
+          "type": "CLIP",
+          "link": 11
+        },
+        {
+          "name": "clip_b",
+          "type": "CLIP",
+          "link": 14
+        }
+      ],
+      "outputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "links": [
+            16,
+            17
+          ]
+        }
+      ],
+      "widgets_values": [
+        "本地模型",
+        [
+          "本地模型",
+          "在线API"
+        ]
+      ],
+      "title": "🔄 CLIP源同步切换"
+    },
+    {
+      "id": 10,
+      "type": "SwitchModel",
+      "pos": [
+        100,
+        3050
+      ],
+      "size": [
+        220,
+        65
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model_a",
+          "type": "MODEL",
+          "link": 10
+        },
+        {
+          "name": "model_b",
+          "type": "MODEL",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "widgets_values": [
+        "本地模型",
+        [
+          "本地模型",
+          "在线API"
+        ]
+      ],
+      "title": "🔄 本地/在线模型切换"
+    },
+    {
+      "id": 7,
+      "type": "Dropdown",
+      "pos": [
+        100,
+        3282
+      ],
+      "size": [
+        220,
+        45
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            8
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "widgets_values": [
+        "竖屏角色卡 (768x1024)",
+        [
+          "竖屏角色卡 (768x1024)",
+          "正方形角色卡 (1024x1024)",
+          "横屏角色卡 (1024x768)"
+        ]
+      ],
+      "title": "📐 角色图画幅选择"
+    },
+    {
+      "id": 6,
+      "type": "Dropdown",
+      "pos": [
+        657.7999999999993,
+        915.7000000000002
+      ],
+      "size": [
+        220,
+        45
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "value",
+          "type": "STRING",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "widgets_values": [
+        "二次元",
+        [
+          "二次元",
+          "古风写实",
+          "现代写实",
+          "赛博朋克",
+          "水墨国风",
+          "3D卡通"
+        ]
+      ],
+      "title": "🎭 画面风格选择"
+    },
+    {
+      "id": 20,
+      "type": "SaveText",
+      "pos": [
+        100,
+        3514
+      ],
+      "size": [
+        380,
+        150
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "file_path",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "📄 保存人物设定文档",
+      "properties": {
+        "Node name for S&R": "SaveText"
+      },
+      "widgets_values": [
+        "人物设定清单.txt",
+        "file.txt",
+        "append",
+        true
+      ]
+    },
+    {
+      "id": 16,
+      "type": "CLIPTextEncode",
+      "pos": [
+        200,
+        1872
+      ],
+      "size": [
+        320,
+        88
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 17
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "title": "🔢 反向提示词编码",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 8,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        200,
+        1382
+      ],
+      "size": [
+        320,
+        98
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            11
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "title": "💾 本地SD底模型加载",
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "sdxl_xl_base_1.0.safetensors"
+      ]
+    },
+    {
+      "id": 9,
+      "type": "SDAPIConfig",
+      "pos": [
+        620,
+        1382
+      ],
+      "size": [
+        320,
+        85
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            13
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "widgets_values": [
+        "https://api.example.com",
+        "你的API密钥",
+        "flux-schnell"
+      ],
+      "title": "🌐 在线SD API配置"
+    },
+    {
+      "id": 14,
+      "type": "PromptLineSplit",
+      "pos": [
+        620,
+        1872
+      ],
+      "size": [
+        320,
+        65
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompts",
+          "type": "STRING",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "📑 批量提示词分行处理"
+    },
+    {
+      "id": 15,
+      "type": "CLIPTextEncodeBatch",
+      "pos": [
+        1040,
+        1872
+      ],
+      "size": [
+        320,
+        90
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 16
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "title": "🔢 批量正向提示词编码"
+    },
+    {
+      "id": 5,
+      "type": "LLMGenerate",
+      "pos": [
+        977.7999999999992,
+        915.7000000000002
+      ],
+      "size": [
+        380,
+        140
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 3
+        },
+        {
+          "name": "system_prompt",
+          "type": "STRING",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "widgets_values": [
+        "deepseek-chat",
+        "你的API密钥",
+        0.7
+      ],
+      "title": "✍️ 生成多视角角色提示词"
+    },
+    {
+      "id": 3,
+      "type": "LLMGenerate",
+      "pos": [
+        660,
+        234
+      ],
+      "size": [
+        380,
+        160
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 1
+        },
+        {
+          "name": "system_prompt",
+          "type": "STRING",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            3,
+            4
+          ]
+        }
+      ],
+      "widgets_values": [
+        "deepseek-chat",
+        "你的API密钥",
+        0.7
+      ],
+      "title": "🤖 提取小说人物设定"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      1,
+      "STRING"
+    ],
+    [
+      3,
+      3,
+      0,
+      5,
+      0,
+      "STRING"
+    ],
+    [
+      4,
+      3,
+      0,
+      20,
+      0,
+      "STRING"
+    ],
+    [
+      5,
+      4,
+      0,
+      5,
+      1,
+      "STRING"
+    ],
+    [
+      6,
+      5,
+      0,
+      12,
+      0,
+      "STRING"
+    ],
+    [
+      7,
+      6,
+      0,
+      12,
+      1,
+      "STRING"
+    ],
+    [
+      8,
+      7,
+      0,
+      17,
+      3,
+      "INT"
+    ],
+    [
+      9,
+      7,
+      1,
+      17,
+      4,
+      "INT"
+    ],
+    [
+      10,
+      8,
+      0,
+      10,
+      0,
+      "MODEL"
+    ],
+    [
+      11,
+      8,
+      1,
+      11,
+      0,
+      "CLIP"
+    ],
+    [
+      12,
+      8,
+      2,
+      18,
+      1,
+      "VAE"
+    ],
+    [
+      13,
+      9,
+      0,
+      10,
+      1,
+      "MODEL"
+    ],
+    [
+      14,
+      9,
+      1,
+      11,
+      1,
+      "CLIP"
+    ],
+    [
+      15,
+      10,
+      0,
+      17,
+      0,
+      "MODEL"
+    ],
+    [
+      16,
+      11,
+      0,
+      15,
+      0,
+      "CLIP"
+    ],
+    [
+      17,
+      11,
+      0,
+      16,
+      0,
+      "CLIP"
+    ],
+    [
+      18,
+      12,
+      0,
+      14,
+      0,
+      "STRING"
+    ],
+    [
+      19,
+      13,
+      0,
+      16,
+      1,
+      "STRING"
+    ],
+    [
+      20,
+      14,
+      0,
+      15,
+      1,
+      "STRING"
+    ],
+    [
+      21,
+      15,
+      0,
+      17,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      22,
+      16,
+      0,
+      17,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      23,
+      17,
+      0,
+      18,
+      0,
+      "LATENT"
+    ],
+    [
+      24,
+      18,
+      0,
+      19,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "📝 小说人物提取分组",
+      "bounding": [
+        100,
+        100,
+        1040,
+        574
+      ],
+      "color": "#3498db",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "🎨 角色提示词生成分组",
+      "bounding": [
+        97.80000000000013,
+        781.6999999999999,
+        1840,
+        374
+      ],
+      "color": "#9b59b6",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "🖥️ 模型加载与切换分组",
+      "bounding": [
+        100,
+        1248,
+        1260,
+        390
+      ],
+      "color": "#e67e22",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "🖼️ 批量角色图生成分组",
+      "bounding": [
+        100,
+        1738,
+        1800,
+        468
+      ],
+      "color": "#2ecc71",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "📤 结果输出分组",
+      "bounding": [
+        100,
+        2306,
+        900,
+        454
+      ],
+      "color": "#1abc9c",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9090909090909091,
+      "offset": [
+        142.31419049408768,
+        120.75605217610614
+      ]
+    },
+    "frontendVersion": "1.45.20",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

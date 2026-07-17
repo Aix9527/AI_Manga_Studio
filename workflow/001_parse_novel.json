@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "name": "001_parse_novel",
+  "description": "Novel text parsing and scene breakdown workflow",
+  "nodes": [],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {}
+}

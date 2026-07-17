@@ -1,0 +1,311 @@
+{
+  "catalog_version": "2.0",
+  "generated": "2026-07-15",
+  "categories": {
+    "image_generation": {
+      "label": "图像生成 (文生图/角色/场景)",
+      "workflows": [
+        {
+          "file": "FLUX.2+klein+文生图++T2I.json",
+          "purpose": "FLUX.2 Klein 文生图，高质量角色/场景底图",
+          "pipeline_step": 7,
+          "model": "FLUX.2 Klein 9B"
+        },
+        {
+          "file": "FLUX.2+klein+单图_双图_多图编辑.json",
+          "purpose": "FLUX.2 图像编辑，支持单/双/多图参考",
+          "pipeline_step": 7,
+          "model": "FLUX.2 Klein"
+        },
+        {
+          "file": "FLUX.2+klein+图像高清处理.json",
+          "purpose": "FLUX.2 图像超分/高清化",
+          "pipeline_step": 9,
+          "model": "FLUX.2 Klein"
+        },
+        {
+          "file": "Z-image+Qwen3+4B+Vs+Qwen3+4b+Z-image+Engineer+V4.json",
+          "purpose": "Z-Image 图像生成/编辑对比工作流",
+          "pipeline_step": 7,
+          "model": "Z-Image + Qwen3-4B"
+        },
+        {
+          "file": "ZIT+双采极致人像+皮肤、光线、表情优化、z-engineer.json",
+          "purpose": "极致人像生成，皮肤/光线/表情三重优化",
+          "pipeline_step": 7,
+          "model": "Z-Image + Qwen3"
+        },
+        {
+          "file": "Moody+V5最强人像细节，Qwen3.5精准反推，光影皮肤感增强，终极批量写真.json",
+          "purpose": "Moody V5 人像 + Qwen3.5 反推提示词，批量写真",
+          "pipeline_step": 7,
+          "model": "Moody V5 + Qwen3.5"
+        },
+        {
+          "file": "FLUX.2+klein+vs+Z-Image.json",
+          "purpose": "FLUX.2 与 Z-Image 对比生成",
+          "pipeline_step": 7,
+          "model": "FLUX.2 vs Z-Image"
+        },
+        {
+          "file": "Flux.2+Klein+究极换头&换脸，零违和感.json",
+          "purpose": "FLUX.2 高精度换脸/换头",
+          "pipeline_step": 9,
+          "model": "FLUX.2 Klein"
+        },
+        {
+          "file": "Klein+9b+BFS2.0+黑兽+最强换脸.json",
+          "purpose": "Klein 9B + BFS + 黑兽 换脸组合",
+          "pipeline_step": 9,
+          "model": "Klein 9B + BFS + DarkBeast"
+        },
+        {
+          "file": "全能图片Pro风格素材生成器.json",
+          "purpose": "多风格素材批量生成器",
+          "pipeline_step": 7,
+          "model": "Multi-model"
+        },
+        {
+          "file": "手绘插画风_ray_QwenEdit_2511_示例工作流.json",
+          "purpose": "手绘插画风格生成 (QwenEdit 2511)",
+          "pipeline_step": 7,
+          "model": "QwenEdit 2511"
+        },
+        {
+          "file": "minecraft_我的世界_QwenEdit_2511_示例工作流.json",
+          "purpose": "Minecraft 风格示例 (QwenEdit 2511)",
+          "pipeline_step": 7,
+          "model": "QwenEdit 2511"
+        },
+        {
+          "file": "海报创意工具：口喷做海报.json",
+          "purpose": "海报/封面设计辅助",
+          "pipeline_step": 7,
+          "model": "Multi-model"
+        },
+        {
+          "file": "超强写真套图，完美一致性.json",
+          "purpose": "多视角角色一致性写真套图",
+          "pipeline_step": 6,
+          "model": "Multi-model"
+        }
+      ]
+    },
+    "image_edit": {
+      "label": "图像编辑 (换装/妆容/风格迁移)",
+      "workflows": [
+        {
+          "file": "FireRed+单双图编辑.json",
+          "purpose": "FireRed 图像编辑引擎",
+          "pipeline_step": 7,
+          "model": "FireRed"
+        },
+        {
+          "file": "FireRed+妆容迁移.json",
+          "purpose": "FireRed 妆容迁移",
+          "pipeline_step": 9,
+          "model": "FireRed"
+        },
+        {
+          "file": "FireRed+海报.json",
+          "purpose": "FireRed 海报生成",
+          "pipeline_step": 7,
+          "model": "FireRed"
+        },
+        {
+          "file": "Red-z动漫转真人.json",
+          "purpose": "Z-Image 动漫转真人风格迁移",
+          "pipeline_step": 7,
+          "model": "Z-Image Red"
+        },
+        {
+          "file": "编辑模型对比，firered+vs+2511+vs+klein.json",
+          "purpose": "三大编辑模型对比",
+          "pipeline_step": 7,
+          "model": "FireRed vs QwenEdit vs Klein"
+        },
+        {
+          "file": "Z-Image+i2L+(image+to+lora).json",
+          "purpose": "图像转 LoRA (角色定制)",
+          "pipeline_step": 6,
+          "model": "Z-Image i2L"
+        }
+      ]
+    },
+    "video_generation": {
+      "label": "视频生成 (图生视频/文生视频)",
+      "workflows": [
+        {
+          "file": "LTX2.3+图生视频I2V+KJ.json",
+          "purpose": "LTX-2.3 图生视频 (核心工作流)",
+          "pipeline_step": 8,
+          "model": "LTX-2.3 22B"
+        },
+        {
+          "file": "LTX2.3+首尾帧+FL2V+.json",
+          "purpose": "LTX-2.3 首尾帧控制视频生成",
+          "pipeline_step": 8,
+          "model": "LTX-2.3"
+        },
+        {
+          "file": "ltx2_音频驱动视频_kj.json",
+          "purpose": "LTX-2 音频驱动视频 (lip-sync)",
+          "pipeline_step": 8,
+          "model": "LTX-2"
+        },
+        {
+          "file": "LTX2.0+T2V+文生视频，自动官方提示词.json",
+          "purpose": "LTX-2.0 文生视频 + 自动提示词",
+          "pipeline_step": 8,
+          "model": "LTX-2.0"
+        },
+        {
+          "file": "LTX2.0+T2V+文生视频，自动官方提示词，破甲.json",
+          "purpose": "LTX-2.0 突破限制文生视频",
+          "pipeline_step": 8,
+          "model": "LTX-2.0"
+        },
+        {
+          "file": "Wan2.2+Dasiwa+V10+++Qwen3.5+自动提示词提图生视频+i2v.json",
+          "purpose": "Wan2.2 图生视频 + Qwen3.5 自动提示词 (核心工作流)",
+          "pipeline_step": 8,
+          "model": "Wan2.2 + Qwen3.5"
+        },
+        {
+          "file": "wan2.2+remix++UnifiedReward+vbvr++动感+推理.json",
+          "purpose": "Wan2.2 Remix + VBVR 动感增强",
+          "pipeline_step": 8,
+          "model": "Wan2.2"
+        },
+        {
+          "file": "本地解码，DaSiWa+i2v+图生视频.json",
+          "purpose": "DaSiWa 本地解码图生视频",
+          "pipeline_step": 8,
+          "model": "DaSiWa"
+        },
+        {
+          "file": "本地解码，DaSiWa+首尾帧.json",
+          "purpose": "DaSiWa 首尾帧控制",
+          "pipeline_step": 8,
+          "model": "DaSiWa"
+        },
+        {
+          "file": "（音色参考）DaVinci-MagiHuman+Qwen3.5图生视频.json",
+          "purpose": "DaVinci MagiHuman + Qwen3.5 图生视频",
+          "pipeline_step": 8,
+          "model": "MagiHuman + Qwen3.5"
+        },
+        {
+          "file": "AI代码侠土豆-LTX-2.3 批量化漫剧 20宫格 直出1分钟视频.json",
+          "purpose": "LTX-2.3 20宫格批量漫剧直出1分钟视频 (核心工作流)",
+          "pipeline_step": 8,
+          "model": "LTX-2.3 22B",
+          "special": "20宫格批量模式"
+        }
+      ]
+    },
+    "video_enhancement": {
+      "label": "视频增强 (超分/去水印/帧插值)",
+      "workflows": [
+        {
+          "file": "Nvidia_RTX+超分放大++图像_视频.json",
+          "purpose": "NVIDIA RTX 超分放大 (图像+视频)",
+          "pipeline_step": 9,
+          "model": "RTX Super-Resolution"
+        },
+        {
+          "file": "DiifuEraser视频水印去除+高清放大.json",
+          "purpose": "视频水印去除 + 高清放大",
+          "pipeline_step": 9,
+          "model": "DIIFU Eraser"
+        }
+      ]
+    },
+    "audio_production": {
+      "label": "音频制作 (配音/BGM/音效)",
+      "workflows": [
+        {
+          "file": "Qwen3+TTS+声音克隆+声音设计+自定义声音+三合一.json",
+          "purpose": "Qwen3 TTS + 声音克隆 + 声音设计 (核心工作流)",
+          "pipeline_step": 10,
+          "model": "Qwen3 TTS"
+        },
+        {
+          "file": "VoxCPM2+声音设计.json",
+          "purpose": "VoxCPM2 声音设计",
+          "pipeline_step": 10,
+          "model": "VoxCPM2"
+        },
+        {
+          "file": "VoxCPM2+音色克隆（推荐）.json",
+          "purpose": "VoxCPM2 音色克隆 (推荐)",
+          "pipeline_step": 10,
+          "model": "VoxCPM2"
+        }
+      ]
+    },
+    "consistency": {
+      "label": "一致性保障 (换脸/姿态/风格)",
+      "workflows": [
+        {
+          "file": "klein+9b+bfs+换脸对比流.json",
+          "purpose": "Klein 9B + BFS 换脸对比",
+          "pipeline_step": 6,
+          "model": "Klein 9B + BFS"
+        },
+        {
+          "file": "SeeThrough二次元卡通PSD完整分层工作流V1.json",
+          "purpose": "二次元卡通 PSD 分层工作流",
+          "pipeline_step": 7,
+          "model": "Multi-layer"
+        }
+      ]
+    }
+  },
+  "model_inventory": {
+    "video_models": [
+      {"name": "Wan2.2 14B SCAIL", "file": "wan2.1_14B_SCAIL_2_fp8_scaled.safetensors", "size_gb": "~16GB", "use": "图生视频-叙事/对白"},
+      {"name": "Wan2.2 DPO LoRA", "file": "wan2.1_scail2-dpo-lora.safetensors", "size_gb": "~small", "use": "Wan2.2 偏好微调"},
+      {"name": "LTX-2.3 22B Distilled", "file": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors", "size_gb": "~12GB", "use": "图生视频-快速预览"},
+      {"name": "LTX-2.3 Text Projection", "file": "ltx-2.3_text_projection_bf16.safetensors", "size_gb": "~variable", "use": "LTX-2.3 文本编码器"},
+      {"name": "LTX-2.3 Video VAE", "file": "LTX23_video_vae_bf16.safetensors", "size_gb": "~variable", "use": "LTX-2.3 视频解码"},
+      {"name": "LTX-2.3 Audio VAE", "file": "LTX23_audio_vae_bf16.safetensors", "size_gb": "~variable", "use": "LTX-2.3 音频解码"},
+      {"name": "LTX-2.3 VBVR I2V", "file": "Ltx2.3-Licon-VBVR-I2V-96000-R32.safetensors", "size_gb": "~small", "use": "LTX-2.3 动感增强"},
+      {"name": "SVI Pro2.0 Wan2.2", "file": "SVI_Wan2.2-I2V-A14B_high_noise_lora_v2.0_pro-f85485ad2681.safetensors", "size_gb": "~small", "use": "长视频一致性"},
+      {"name": "Gemma 3 12B (LTX)", "file": "gemma_3_12B_it_heretic_fp8_e4m3fn.safetensors", "size_gb": "~8GB", "use": "LTX-2.3 文本理解"}
+    ],
+    "image_models": [
+      {"name": "FLUX.2 Klein 9B Base", "file": "black-forest-labs：FLUX.2-klein-base-9B.safetensors", "size_gb": "~18GB", "use": "高质量图像生成"},
+      {"name": "FLUX.2 Klein FP8", "file": "flux-2-klein-9b-fp8.safetensors", "size_gb": "~9GB", "use": "FLUX.2 量化版"},
+      {"name": "Qwen-Image-Edit-2511", "file": "qwen_image_edit_2511_fp8_e4m3fn.safetensors", "size_gb": "~6GB", "use": "图像编辑"},
+      {"name": "Qwen-Image-Edit-2511 Lightning", "file": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", "size_gb": "~6GB", "use": "快速图像编辑"},
+      {"name": "Qwen-Image-2512 FP8", "file": "qwen-image-2512-fp8.safetensors", "size_gb": "~6GB", "use": "最新图像模型"},
+      {"name": "IDEogram4", "file": "ideogram4_fp8_scaled.safetensors", "size_gb": "~variable", "use": "高质量图像"},
+      {"name": "FireRed Image Edit 1.1", "file": "FireRed-Image-Edit-1.1_fp8mixed_comfy.safetensors", "size_gb": "~variable", "use": "图像编辑"},
+      {"name": "Z-Image Engineer V6", "file": "Z-Image-Engineer-V6-Q8_0.gguf", "size_gb": "~4GB", "use": "Z-Image 工程版"},
+      {"name": "Ernie Image Turbo", "file": "ernie-image-turbo.safetensors", "size_gb": "~variable", "use": "ERNIE 图像生成"},
+      {"name": "Ideogram4 Qwen3VL", "file": "qwen3vl_8b_fp8_scaled.safetensors", "size_gb": "~5GB", "use": "Ideogram4 视觉语言"}
+    ],
+    "lora_models": [
+      {"name": "Consistence Edit V2", "file": "consistence_edit_v2.safetensors", "use": "角色一致性编辑"},
+      {"name": "Next Scene LoRA", "file": "next-scene_lora-v2-3000.safetensors", "use": "场景转换"},
+      {"name": "Qwen Edit Multiple Angles", "file": "qwen-image-edit-2511-multiple-angles-lora.safetensors", "use": "多角度角色生成"},
+      {"name": "2511 AnyPose Base", "file": "2511-AnyPose-base-000006250.safetensors", "use": "任意姿势控制"},
+      {"name": "2511 AnyPose Helper", "file": "2511-AnyPose-helper-00006000.safetensors", "use": "姿势辅助"},
+      {"name": "Qwen InstantX ControlNet Union", "file": "Qwen-Image-InstantX-ControlNet-Union-3f6c18d49e04.safetensors", "use": "ControlNet 联合控制"},
+      {"name": "Qwen Edit 百变姿势", "file": "Qwen_Edit百变姿势.safetensors", "use": "多姿势生成"},
+      {"name": "氛围感 LoRA", "file": "氛围感_Qwen2511_fenweigan_2500.safetensors", "use": "氛围风格"},
+      {"name": "手绘插画 LoRA", "file": "风格化手绘插画_QwenEdit_2511_lora_ray", "use": "插画风格"}
+    ],
+    "character_loras": [
+      {"name": "Anima Base V10", "file": "Anima\\anima_baseV10.safetensors", "use": "动漫角色基础"},
+      {"name": "Silvermoon Mix", "file": "Anima\\silvermoonmixAnima_v10.safetensors", "use": "银月风格"},
+      {"name": "Niji Sweet Spot 2a", "file": "Anima\\Niji Sweet Spot-Anima2a-@sw3t.safetensors", "use": "Niji 动漫风"},
+      {"name": "Moody Real Mix V5 DPO", "file": "moodyRealMix_zitV5DPO.safetensors", "use": "真实人像"},
+      {"name": "Better Curvy Figure", "file": "Better Curvy Figure 身材优化@ZIT.safetensors", "use": "身材优化"},
+      {"name": "Nicegirls Skin", "file": "nicegirls_qwen2512.safetensors", "use": "皮肤优化"},
+      {"name": "Skin Texture v4.5", "file": "skin texture Photorealistic style v4.5", "use": "皮肤纹理"},
+      {"name": "PixelSmile", "file": "PixelSmile-preview.safetensors", "use": "微笑表情"}
+    ]
+  }
+}

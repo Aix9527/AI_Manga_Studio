@@ -1,0 +1,1782 @@
+{
+  "last_node_id": 156,
+  "last_link_id": 450,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "PrimitiveStringMultiline",
+      "pos": [20, 20],
+      "size": [450, 200],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [1],
+          "slot_index": 0
+        }
+      ],
+      "title": "小说原文输入",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "请在此粘贴小说文本。系统会自动:\n1. 解析所有出场人物及其特征\n2. 提取场景描写和环境设定\n3. 分析动作链和情绪变化\n4. 生成角色板和分镜脚本\n5. 输出视频合成提示词"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "PrimitiveString",
+      "pos": [20, 250],
+      "size": [450, 50],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [2],
+          "slot_index": 0
+        }
+      ],
+      "title": "作品名称",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "我的小说"
+    },
+    {
+      "id": 3,
+      "type": "PrimitiveInt",
+      "pos": [20, 320],
+      "size": [210, 80],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [3],
+          "slot_index": 0
+        }
+      ],
+      "title": "主要角色数",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": 5,
+      "color": "#233",
+      "backgroundColor": "#353535"
+    },
+    {
+      "id": 4,
+      "type": "PrimitiveInt",
+      "pos": [250, 320],
+      "size": [210, 80],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [4],
+          "slot_index": 0
+        }
+      ],
+      "title": "分镜数量",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": 10,
+      "color": "#233",
+      "backgroundColor": "#353535"
+    },
+    {
+      "id": 5,
+      "type": "OpenAIChatConfig",
+      "pos": [550, 20],
+      "size": [400, 140],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "OPENAI_CHAT_CONFIG",
+          "type": "OPENAI_CHAT_CONFIG",
+          "links": [5],
+          "slot_index": 0
+        }
+      ],
+      "title": "OpenAI API 配置",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "sk-your-api-key-here",
+        "gpt-4o",
+        null,
+        null,
+        null,
+        0.3,
+        null
+      ]
+    },
+    {
+      "id": 6,
+      "type": "OpenAIChatNode",
+      "pos": [1000, 20],
+      "size": [500, 500],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "openai_chat_config",
+          "type": "OPENAI_CHAT_CONFIG",
+          "link": 5
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [7],
+          "slot_index": 0
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "📖 小说深度分析引擎",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        null,
+        "",
+        "",
+        0,
+        "gpt-4o"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "PrimitiveStringMultiline",
+      "pos": [1550, 20],
+      "size": [550, 500],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [8, 9, 10],
+          "slot_index": 0
+        }
+      ],
+      "title": "人物设定分析结果",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "【角色1】林晚晴\n- 性别: 女\n- 年龄: 22岁\n- 身高: 165cm\n- 体型: 纤细匀称\n- 发色: 乌黑长发及腰\n- 瞳色: 琥珀色\n- 性格: 外柔内刚，清冷出尘\n- 服饰: 浅蓝色渐变汉服长裙，白色披帛，玉簪\n- 气质: 仙气飘逸\n\n【角色2】顾沉舟\n- 性别: 男\n- 年龄: 25岁\n- 身高: 182cm\n- 体型: 修长挺拔\n- 发色: 墨黑束冠\n- 瞳色: 深邃漆黑\n- 性格: 沉稳内敛，杀伐果断\n- 服饰: 玄色暗纹锦袍，玉带\n- 气质: 威严霸气"
+    },
+    {
+      "id": 8,
+      "type": "PrimitiveStringMultiline",
+      "pos": [1550, 550],
+      "size": [550, 350],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [11, 12],
+          "slot_index": 0
+        }
+      ],
+      "title": "场景设定分析结果",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "【场景1】竹林别院\n- 位置: 江南水乡\n- 时间: 清晨\n- 天气: 薄雾缭绕\n- 光线: 柔和侧光\n- 色调: 青绿色系\n- 氛围: 宁静幽雅\n- 关键元素: 翠竹、石径、木桥、流水\n\n【场景2】将军府正厅\n- 位置: 京城\n- 时间: 夜晚\n- 天气: 无\n- 光线: 烛光暖调\n- 色调: 金红色系\n- 氛围: 肃穆威严\n- 关键元素: 紫檀木屏风、金砖地面、龙纹柱"
+    },
+    {
+      "id": 9,
+      "type": "PrimitiveStringMultiline",
+      "pos": [1550, 930],
+      "size": [550, 300],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [13],
+          "slot_index": 0
+        }
+      ],
+      "title": "动作/情绪/分镜提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "【动作链】\n- 林晚晴: 执剑转身→衣袂飘飞→眼神凌厉→踏步向前\n- 顾沉舟: 抬手→握拳→目光如炬→大步流星\n\n【微表情集】\n- 疑惑: 微蹙眉，唇微抿\n- 释然: 唇角轻扬，眼尾弯\n- 震惊: 瞳孔收缩，倒吸一口气\n- 悲伤: 眼眶泛红，泪珠滑落\n\n【分镜脚本】\n1. 全景: 竹林晨雾，白衣女子立于桥上\n2. 中景: 剑光一闪，竹叶纷飞\n3. 特写: 琥珀色瞳孔中倒映人影\n4. 近景: 玄色锦袍入画，两人对视\n5. 远景: 将军府夜景，灯火辉煌\n6. 中景: 屏风前跪拜，玉带反光\n7. 特写: 手指紧握剑柄\n8. 近景: 披帛随风飘舞\n9. 全景: 月下对饮，竹影婆娑\n10. 远景: 背影渐远，融入晨雾"
+    },
+    {
+      "id": 10,
+      "type": "StringConcatenate",
+      "pos": [2200, 20],
+      "size": [400, 100],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text1",
+          "type": "STRING",
+          "link": 7
+        },
+        {
+          "name": "text2",
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "STRING",
+          "links": [14],
+          "slot_index": 0
+        }
+      ],
+      "title": "拼接完整提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "\n\nGenerate English character design prompts:\n\n",
+        "characters"
+      ]
+    },
+    {
+      "id": 11,
+      "type": "OpenAIChatNode",
+      "pos": [2650, 20],
+      "size": [500, 450],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "openai_chat_config",
+          "type": "OPENAI_CHAT_CONFIG",
+          "link": 5
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 14
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [15, 16, 17, 18, 19],
+          "slot_index": 0
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "🎨 英文提示词翻译",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        null,
+        "",
+        "",
+        0,
+        "gpt-4o"
+      ]
+    },
+    {
+      "id": 12,
+      "type": "PrimitiveStringMultiline",
+      "pos": [3200, 20],
+      "size": [500, 200],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [20],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色1正面提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "masterpiece, best quality, 1girl, Lin Wanqing, long black hair to waist, amber eyes, slender figure, light blue hanfu dress, white silk sash, jade hairpin, ethereal aura, standing in bamboo forest morning mist, full body portrait, front view, detailed face, gentle expression"
+    },
+    {
+      "id": 13,
+      "type": "PrimitiveStringMultiline",
+      "pos": [3200, 250],
+      "size": [500, 200],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [21],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色1侧面提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "masterpiece, best quality, 1girl, Lin Wanqing, profile view, side portrait, long black hair, amber eyes, light blue hanfu, white silk sash flowing, jade hairpin, bamboo forest background, elegant posture, detailed costume"
+    },
+    {
+      "id": 14,
+      "type": "PrimitiveStringMultiline",
+      "pos": [3200, 480],
+      "size": [500, 200],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [22],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色1背面提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "masterpiece, best quality, 1girl, Lin Wanqing, back view, rear portrait, long black hair cascading down, light blue hanfu back detail, white silk sash from behind, jade hairpin visible, bamboo forest, elegant posture"
+    },
+    {
+      "id": 20,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 20],
+      "size": [450, 220],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [30],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色1正面图",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 21,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 270],
+      "size": [450, 220],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [31],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色1侧面图",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 22,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 520],
+      "size": [450, 220],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [32],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色1背面图",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 23,
+      "type": "PreviewAny",
+      "pos": [4350, 20],
+      "size": [350, 280],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 30
+        }
+      ],
+      "title": "正面预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 24,
+      "type": "PreviewAny",
+      "pos": [4350, 270],
+      "size": [350, 280],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 31
+        }
+      ],
+      "title": "侧面预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 25,
+      "type": "PreviewAny",
+      "pos": [4350, 520],
+      "size": [350, 280],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 32
+        }
+      ],
+      "title": "背面预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 30,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 780],
+      "size": [450, 220],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 23
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [33],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色2正面图",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 31,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 1030],
+      "size": [450, 220],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [34],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色2侧面图",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 32,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 1280],
+      "size": [450, 220],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [35],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色2背面图",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 33,
+      "type": "PreviewAny",
+      "pos": [4350, 780],
+      "size": [350, 280],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 33
+        }
+      ],
+      "title": "角色2正面",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 34,
+      "type": "PreviewAny",
+      "pos": [4350, 1030],
+      "size": [350, 280],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 34
+        }
+      ],
+      "title": "角色2侧面",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 35,
+      "type": "PreviewAny",
+      "pos": [4350, 1280],
+      "size": [350, 280],
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 35
+        }
+      ],
+      "title": "角色2背面",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 40,
+      "type": "PrimitiveStringMultiline",
+      "pos": [3200, 700],
+      "size": [500, 200],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [23],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色2正面提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "masterpiece, best quality, 1boy, Gu Chenzhou, tall muscular build, black hair in topknot, deep black eyes, noble aura, dark brocade robe with dragon pattern, jade belt, standing in将军府 night, full body portrait, front view, stern expression, authoritative"
+    },
+    {
+      "id": 41,
+      "type": "PrimitiveStringMultiline",
+      "pos": [3200, 920],
+      "size": [500, 200],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [24],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色2侧面提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "masterpiece, best quality, 1boy, Gu Chenzhou, profile view, side portrait, black hair topknot, dark brocade robe, jade belt detail,将军府 night background, dignified posture, detailed costume embroidery"
+    },
+    {
+      "id": 42,
+      "type": "PrimitiveStringMultiline",
+      "pos": [3200, 1140],
+      "size": [500, 200],
+      "flags": {},
+      "order": 28,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [25],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色2背面提示词",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": "masterpiece, best quality, 1boy, Gu Chenzhou, back view, rear portrait, black hair topknot from behind, dark brocade robe back embroidery, dragon pattern visible, jade belt from behind,将军府 night"
+    },
+    {
+      "id": 50,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 1530],
+      "size": [450, 220],
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [36],
+          "slot_index": 0
+        }
+      ],
+      "title": "微表情-喜",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 51,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [4300, 1530],
+      "size": [450, 220],
+      "flags": {},
+      "order": 30,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 27
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [37],
+          "slot_index": 0
+        }
+      ],
+      "title": "微表情-怒",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 52,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [4800, 1530],
+      "size": [450, 220],
+      "flags": {},
+      "order": 31,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 28
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [38],
+          "slot_index": 0
+        }
+      ],
+      "title": "微表情-哀",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 53,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [5300, 1530],
+      "size": [450, 220],
+      "flags": {},
+      "order": 32,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 29
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [39],
+          "slot_index": 0
+        }
+      ],
+      "title": "微表情-惧/疑",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 54,
+      "type": "PreviewAny",
+      "pos": [5800, 1530],
+      "size": [350, 280],
+      "flags": {},
+      "order": 33,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 36
+        }
+      ],
+      "title": "表情预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 60,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [3800, 1800],
+      "size": [450, 220],
+      "flags": {},
+      "order": 34,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 40
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [41],
+          "slot_index": 0
+        }
+      ],
+      "title": "服饰-日常",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 61,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [4300, 1800],
+      "size": [450, 220],
+      "flags": {},
+      "order": 35,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 41
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [42],
+          "slot_index": 0
+        }
+      ],
+      "title": "服饰-正式",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 62,
+      "type": "RecraftV4TextToImageNode",
+      "pos": [4800, 1800],
+      "size": [450, 220],
+      "flags": {},
+      "order": 36,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 42
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [43],
+          "slot_index": 0
+        }
+      ],
+      "title": "饰品-武器/法器",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "digital_illustration",
+        "1024x1024",
+        3,
+        7
+      ]
+    },
+    {
+      "id": 63,
+      "type": "PreviewAny",
+      "pos": [5300, 1800],
+      "size": [350, 280],
+      "flags": {},
+      "order": 37,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 41
+        }
+      ],
+      "title": "服饰预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 70,
+      "type": "IdeogramV3",
+      "pos": [1000, 1600],
+      "size": [450, 250],
+      "flags": {},
+      "order": 38,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [44],
+          "slot_index": 0
+        }
+      ],
+      "title": "场景图生成-IdeogramV3",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "standard",
+        "1024x1024",
+        4,
+        7
+      ]
+    },
+    {
+      "id": 71,
+      "type": "PreviewAny",
+      "pos": [1500, 1600],
+      "size": [400, 300],
+      "flags": {},
+      "order": 39,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 44
+        }
+      ],
+      "title": "场景预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 80,
+      "type": "ByteDanceImageNode",
+      "pos": [1000, 1950],
+      "size": [450, 220],
+      "flags": {},
+      "order": 40,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [45],
+          "slot_index": 0
+        }
+      ],
+      "title": "角色动作图-ByteDance",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "seedream",
+        "1024x1024",
+        42,
+        7
+      ]
+    },
+    {
+      "id": 81,
+      "type": "PreviewAny",
+      "pos": [1500, 1950],
+      "size": [400, 300],
+      "flags": {},
+      "order": 41,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "IMAGE",
+          "link": 45
+        }
+      ],
+      "title": "动作预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 90,
+      "type": "WanImageToVideoApi",
+      "pos": [1000, 2300],
+      "size": [500, 280],
+      "flags": {},
+      "order": 42,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [46],
+          "slot_index": 0
+        }
+      ],
+      "title": "🎬 人物视频-Wan2 API",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "",
+        "",
+        24,
+        720,
+        720,
+        5,
+        6.5
+      ]
+    },
+    {
+      "id": 91,
+      "type": "PreviewAny",
+      "pos": [1550, 2300],
+      "size": [450, 300],
+      "flags": {},
+      "order": 43,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "VIDEO",
+          "link": 46
+        }
+      ],
+      "title": "视频预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 100,
+      "type": "CreateList",
+      "pos": [2000, 2300],
+      "size": [300, 60],
+      "flags": {},
+      "order": 44,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIST",
+          "type": "LIST",
+          "links": [47],
+          "slot_index": 0
+        }
+      ],
+      "title": "人物视频列表",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 101,
+      "type": "CreateList",
+      "pos": [2400, 2300],
+      "size": [300, 60],
+      "flags": {},
+      "order": 45,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIST",
+          "type": "LIST",
+          "links": [48],
+          "slot_index": 0
+        }
+      ],
+      "title": "分镜提示词列表",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 102,
+      "type": "CreateList",
+      "pos": [2800, 2300],
+      "size": [300, 60],
+      "flags": {},
+      "order": 46,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIST",
+          "type": "LIST",
+          "links": [49],
+          "slot_index": 0
+        }
+      ],
+      "title": "分镜参考图列表",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 103,
+      "type": "CreateList",
+      "pos": [3200, 2300],
+      "size": [300, 60],
+      "flags": {},
+      "order": 47,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIST",
+          "type": "LIST",
+          "links": [50],
+          "slot_index": 0
+        }
+      ],
+      "title": "分镜视频列表",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 104,
+      "type": "PreviewAny",
+      "pos": [3600, 2300],
+      "size": [400, 200],
+      "flags": {},
+      "order": 48,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "LIST",
+          "link": 47
+        }
+      ],
+      "title": "10人物预览框",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 105,
+      "type": "PreviewAny",
+      "pos": [3600, 2520],
+      "size": [400, 200],
+      "flags": {},
+      "order": 49,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "LIST",
+          "link": 50
+        }
+      ],
+      "title": "10分镜预览框",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 110,
+      "type": "SAM3_VideoTrack",
+      "pos": [1000, 2650],
+      "size": [450, 150],
+      "flags": {},
+      "order": 50,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "prompts",
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": [51],
+          "slot_index": 0
+        }
+      ],
+      "title": "🔗 角色一致性追踪-SAM3",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 111,
+      "type": "SAM3_TrackPreview",
+      "pos": [1500, 2650],
+      "size": [400, 200],
+      "flags": {},
+      "order": 51,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "masks",
+          "type": "MASK",
+          "link": 51
+        }
+      ],
+      "title": "追踪预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 120,
+      "type": "ControlNetLoader",
+      "pos": [2000, 2650],
+      "size": [400, 80],
+      "flags": {},
+      "order": 52,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CONTROL_NET",
+          "type": "CONTROL_NET",
+          "links": [52],
+          "slot_index": 0
+        }
+      ],
+      "title": "ControlNet加载器",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "FLUX.1-dev-Controlnet-Union.safetensors"
+      ]
+    },
+    {
+      "id": 121,
+      "type": "ControlNetApplyAdvanced",
+      "pos": [2450, 2650],
+      "size": [450, 120],
+      "flags": {},
+      "order": 53,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": null
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": null
+        },
+        {
+          "name": "control_net",
+          "type": "CONTROL_NET",
+          "link": 52
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [53],
+          "slot_index": 0
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [54],
+          "slot_index": 1
+        }
+      ],
+      "title": "动作链一致性ControlNet",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        0.8,
+        0.2,
+        4
+      ]
+    },
+    {
+      "id": 130,
+      "type": "LumaVideoNode",
+      "pos": [3000, 2650],
+      "size": [450, 250],
+      "flags": {},
+      "order": 54,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "reference",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [55],
+          "slot_index": 0
+        }
+      ],
+      "title": "🎥 视频合成-Luma",
+      "properties": {
+        "Node name and SClass": "utility"
+      },
+      "widgets_values": [
+        "luma-diamond",
+        5,
+        720,
+        720,
+        ""
+      ]
+    },
+    {
+      "id": 131,
+      "type": "PreviewAny",
+      "pos": [3500, 2650],
+      "size": [450, 300],
+      "flags": {},
+      "order": 55,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "VIDEO",
+          "link": 55
+        }
+      ],
+      "title": "最终合成预览",
+      "properties": {
+        "Node name and SClass": "utility"
+      }
+    },
+    {
+      "id": 140,
+      "type": "Group",
+      "pos": [0, 0],
+      "size": [2200, 600],
+      "flags": {},
+      "order": 56,
+      "mode": -1,
+      "title": "📖 小说解析模块",
+      "color": "#4A90D9",
+      "pinned": false
+    },
+    {
+      "id": 141,
+      "type": "Group",
+      "pos": [2800, 0],
+      "size": [2000, 700],
+      "flags": {},
+      "order": 57,
+      "mode": -1,
+      "title": "👤 角色身份板模块",
+      "color": "#E67E22",
+      "pinned": false
+    },
+    {
+      "id": 142,
+      "type": "Group",
+      "pos": [2800, 700],
+      "size": [2000, 700],
+      "flags": {},
+      "order": 58,
+      "mode": -1,
+      "title": "😊 微表情&服饰模块",
+      "color": "#E74C3C",
+      "pinned": false
+    },
+    {
+      "id": 143,
+      "type": "Group",
+      "pos": [900, 1500],
+      "size": [1100, 650],
+      "flags": {},
+      "order": 59,
+      "mode": -1,
+      "title": "🎬 场景&动作生成模块",
+      "color": "#27AE60",
+      "pinned": false
+    },
+    {
+      "id": 144,
+      "type": "Group",
+      "pos": [900, 2200],
+      "size": [2700, 350],
+      "flags": {},
+      "order": 60,
+      "mode": -1,
+      "title": "🎥 视频生成&预览模块",
+      "color": "#8E44AD",
+      "pinned": false
+    },
+    {
+      "id": 145,
+      "type": "Group",
+      "pos": [900, 2600],
+      "size": [3100, 200],
+      "flags": {},
+      "order": 61,
+      "mode": -1,
+      "title": "🔗 一致性保障模块",
+      "color": "#1ABC9C",
+      "pinned": false
+    },
+    {
+      "id": 150,
+      "type": "Group",
+      "pos": [3600, 2200],
+      "size": [500, 600],
+      "flags": {},
+      "order": 62,
+      "mode": -1,
+      "title": "📊 总览仪表盘",
+      "color": "#F39C12",
+      "pinned": false
+    }
+  ],
+  "links": [
+    [1, 1, 0, 6, 1, "STRING"],
+    [2, 2, 0, 6, 1, "STRING"],
+    [3, 3, 0, 6, 1, "STRING"],
+    [4, 4, 0, 6, 1, "STRING"],
+    [5, 5, 0, 6, 0, "OPENAI_CHAT_CONFIG"],
+    [6, 1, 0, 6, 1, "STRING"],
+    [7, 6, 0, 10, 0, "STRING"],
+    [8, 7, 0, 12, 0, "STRING"],
+    [9, 7, 0, 13, 0, "STRING"],
+    [10, 7, 0, 14, 0, "STRING"],
+    [11, 8, 0, 70, 0, "STRING"],
+    [12, 8, 0, 70, 0, "STRING"],
+    [13, 9, 0, 80, 0, "STRING"],
+    [14, 10, 0, 11, 0, "STRING"],
+    [15, 11, 0, 12, 0, "STRING"],
+    [16, 11, 0, 13, 0, "STRING"],
+    [17, 11, 0, 14, 0, "STRING"],
+    [18, 11, 0, 40, 0, "STRING"],
+    [19, 11, 0, 41, 0, "STRING"],
+    [20, 12, 0, 20, 0, "STRING"],
+    [21, 13, 0, 21, 0, "STRING"],
+    [22, 14, 0, 22, 0, "STRING"],
+    [23, 40, 0, 30, 0, "STRING"],
+    [24, 41, 0, 31, 0, "STRING"],
+    [25, 42, 0, 32, 0, "STRING"],
+    [26, 11, 0, 50, 0, "STRING"],
+    [27, 11, 0, 51, 0, "STRING"],
+    [28, 11, 0, 52, 0, "STRING"],
+    [29, 11, 0, 53, 0, "STRING"],
+    [30, 20, 0, 23, 0, "IMAGE"],
+    [31, 21, 0, 24, 0, "IMAGE"],
+    [32, 22, 0, 25, 0, "IMAGE"],
+    [33, 30, 0, 33, 0, "IMAGE"],
+    [34, 31, 0, 34, 0, "IMAGE"],
+    [35, 32, 0, 35, 0, "IMAGE"],
+    [36, 50, 0, 54, 0, "IMAGE"],
+    [37, 51, 0, 54, 0, "IMAGE"],
+    [38, 52, 0, 54, 0, "IMAGE"],
+    [39, 53, 0, 54, 0, "IMAGE"],
+    [40, 60, 0, 63, 0, "IMAGE"],
+    [41, 61, 0, 63, 0, "IMAGE"],
+    [42, 62, 0, 63, 0, "IMAGE"],
+    [43, 62, 0, 54, 0, "IMAGE"],
+    [44, 70, 0, 71, 0, "IMAGE"],
+    [45, 80, 0, 81, 0, "IMAGE"],
+    [46, 90, 0, 91, 0, "VIDEO"],
+    [47, 100, 0, 104, 0, "LIST"],
+    [48, 101, 0, 105, 0, "LIST"],
+    [49, 102, 0, 105, 0, "LIST"],
+    [50, 103, 0, 105, 0, "LIST"],
+    [51, 110, 0, 111, 0, "MASK"],
+    [52, 120, 0, 121, 2, "CONTROL_NET"],
+    [53, 121, 0, 121, 0, "CONDITIONING"],
+    [54, 121, 1, 121, 1, "CONDITIONING"],
+    [55, 130, 0, 131, 0, "VIDEO"]
+  ],
+  "groups": [
+    {
+      "id": 140,
+      "title": "📖 小说解析模块",
+      "bounding": [0, 0, 2200, 600],
+      "color": "#4A90D9",
+      "font_size": 18,
+      "padding": 10
+    },
+    {
+      "id": 141,
+      "title": "👤 角色身份板模块",
+      "bounding": [2800, 0, 2000, 700],
+      "color": "#E67E22",
+      "font_size": 18,
+      "padding": 10
+    },
+    {
+      "id": 142,
+      "title": "😊 微表情&服饰模块",
+      "bounding": [2800, 700, 2000, 700],
+      "color": "#E74C3C",
+      "font_size": 18,
+      "padding": 10
+    },
+    {
+      "id": 143,
+      "title": "🎬 场景&动作生成模块",
+      "bounding": [900, 1500, 1100, 650],
+      "color": "#27AE60",
+      "font_size": 18,
+      "padding": 10
+    },
+    {
+      "id": 144,
+      "title": "🎥 视频生成&预览模块",
+      "bounding": [900, 2200, 2700, 350],
+      "color": "#8E44AD",
+      "font_size": 18,
+      "padding": 10
+    },
+    {
+      "id": 145,
+      "title": "🔗 一致性保障模块",
+      "bounding": [900, 2600, 3100, 200],
+      "color": "#1ABC9C",
+      "font_size": 18,
+      "padding": 10
+    },
+    {
+      "id": 150,
+      "title": "📊 总览仪表盘",
+      "bounding": [3600, 2200, 500, 600],
+      "color": "#F39C12",
+      "font_size": 18,
+      "padding": 10
+    }
+  ],
+  "config": [],
+  "extra": {
+    "ds": {
+      "scale": 0.7,
+      "offset": [0, 0]
+    },
+    "node_versions": {
+      "ComfyUI-Core": "v0.20.1"
+    },
+    "version": 0.4
+  },
+  "version": 0.4
+}

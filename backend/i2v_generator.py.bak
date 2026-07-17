@@ -1,0 +1,334 @@
+"""
+AI Manga Studio Pro V4 鈥?I2V Workflow Generator with Director-Level Control
+
+Upgraded from AnimateDiff-only to multi-model I2V support:
+  1. Wan2.2 I2V (first frame + last frame + motion prompt) 鈥?PRIMARY
+  2. HunyuanVideo I2V (first frame + motion prompt) 鈥?FALLBACK
+  3. AnimateDiff I2V (single image + motion) 鈥?EMERGENCY
+
+Features:
+- First/last frame pair generation for Wan2.2 I2V
+- Motion prompt injection from CinemaVideoPromptBuilder
+- Shot-type-aware workflow parameters
+- Character lock via PuLID/IPAdapter injection
+- FX layer injection (speed lines, impact waves, particles)
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from loguru import logger
+
+from backend.unified_shot import UnifiedShot
+from backend.workflow_generator import _build_positive_prompt, _build_negative_prompt
+
+# Template paths
+TEMPLATE_DIR = Path(__file__).parent.parent / "workflow" / "templates"
+
+# Node IDs for AnimateDiff template
+NODE_CHECKPOINT = 1
+NODE_LOAD_IMAGE = 2
+NODE_CLIP_POS = 3
+NODE_CLIP_NEG = 4
+NODE_VAE_ENCODE = 5
+NODE_MOTION = 6
+NODE_APPLY = 7
+NODE_EVOLVED = 8
+NODE_SAMPLER = 9
+NODE_VAE_DECODE = 10
+NODE_VHS_COMBINE = 11
+NODE_CONTEXT = 12
+NODE_LATENT_BATCH = 13
+
+# Wan2.2 I2V node IDs (for wan_i2v.json template)
+WAN_NODE_LOAD_IMAGE_FIRST = 100
+WAN_NODE_LOAD_IMAGE_LAST = 101
+WAN_NODE_ENCODE_FIRST = 102
+WAN_NODE_ENCODE_LAST = 103
+WAN_NODE_SET_FIRST = 104
+WAN_NODE_SET_LAST = 105
+WAN_NODE_MODEL = 106
+WAN_NODE_CLIP = 107
+WAN_NODE_VAE = 108
+WAN_NODE_SAMPLE = 109
+WAN_NODE_SAVE = 110
+
+# Resolution presets per shot type
+RESOLUTION_PRESETS = {
+    "close": (768, 768),       # Square for portraits
+    "medium": (1344, 768),     # 16:9 standard
+    "wide": (1536, 640),       # 2.4:1 cinematic widescreen
+    "drone": (1536, 1024),     # 3:2 aerial
+    "pov": (1344, 768),        # 16:9 immersive
+    "tracking": (1344, 768),   # 16:9 lateral
+    "dutch": (1024, 1344),     # Vertical dramatic
+    "overhead": (1344, 1344),  # Square top-down
+}
+
+# Frame counts per shot duration
+FRAME_COUNTS = {
+    "close": (24, 48),        # 1-2 sec @ 24fps
+    "medium": (48, 72),       # 2-3 sec @ 24fps
+    "wide": (72, 96),         # 3-4 sec @ 24fps
+    "drone": (96, 144),       # 4-6 sec @ 24fps
+    "pov": (48, 72),          # 2-3 sec
+    "tracking": (72, 96),     # 3-4 sec
+    "dutch": (24, 48),        # 1-2 sec
+    "overhead": (96, 144),    # 4-6 sec
+}
+
+
+class I2VGenerator:
+    """Build I2V workflows from UnifiedShot + motion data.
+
+    Supports three backends:
+      - Wan2.2 I2V (preferred): first frame + last frame + motion prompt
+      - AnimateDiff I2V (fallback): single image + motion module
+    """
+
+    def __init__(
+        self,
+        wan_template_path: Optional[str] = None,
+        ad_template_path: Optional[str] = None,
+    ):
+        # Load Wan2.2 template
+        wan_path = Path(wan_template_path) if wan_template_path else TEMPLATE_DIR / "wan_i2v.json"
+        self._wan_template: Optional[Dict] = None
+        if wan_path.exists():
+            with open(wan_path, "r", encoding="utf-8") as f:
+                self._wan_template = json.load(f)
+            logger.info(f"I2VGenerator: Loaded Wan2.2 template ({wan_path.name})")
+
+        # Load AnimateDiff template
+        ad_path = Path(ad_template_path) if ad_template_path else TEMPLATE_DIR / "i2v_gen.json"
+        self._ad_template: Optional[Dict] = None
+        if ad_path.exists():
+            with open(ad_path, "r", encoding="utf-8") as f:
+                self._ad_template = json.load(f)
+            logger.info(f"I2VGenerator: Loaded AnimateDiff template ({ad_path.name})")
+
+    # ---- Public API ----
+
+    def generate(
+        self,
+        shot: UnifiedShot,
+        input_image: str,
+        last_frame_image: Optional[str] = None,
+        motion_prompt: str = "",
+        frame_count: Optional[int] = None,
+        fps: int = 24,
+        model: str = "auto",
+    ) -> Dict[str, Any]:
+        """Build I2V workflow JSON.
+
+        Args:
+            shot: UnifiedShot with all shot metadata.
+            input_image: Path to first frame image.
+            last_frame_image: Path to last frame image (for Wan2.2 I2V).
+            motion_prompt: Director-level motion prompt from CinemaVideoPromptBuilder.
+            frame_count: Override frame count (auto-calculated if None).
+            fps: Target FPS.
+            model: "wan" | "animatediff" | "auto".
+
+        Returns:
+            ComfyUI API-format workflow dict.
+        """
+        # Auto-detect model
+        if model == "auto":
+            model = self._detect_best_model(last_frame_image is not None)
+
+        if model == "wan" and self._wan_template:
+            return self._generate_wan(shot, input_image, last_frame_image, motion_prompt, frame_count, fps)
+        elif model == "animatediff" and self._ad_template:
+            return self._generate_animatediff(shot, input_image, motion_prompt, frame_count, fps)
+        else:
+            # Fallback to AnimateDiff even if Wan requested
+            if self._ad_template:
+                return self._generate_animatediff(shot, input_image, motion_prompt, frame_count, fps)
+            raise RuntimeError("No I2V template available. Please provide wan_i2v.json or i2v_gen.json template.")
+
+    def generate_with_frames(
+        self,
+        shot: UnifiedShot,
+        first_frame: str,
+        last_frame: str,
+        motion_prompt: str = "",
+    ) -> Dict[str, Any]:
+        """Generate I2V workflow with explicit first and last frame images.
+
+        This is the primary method for Wan2.2 I2V 鈥?using both reference
+        frames ensures smooth interpolation and precise motion control.
+        """
+        return self.generate(
+            shot=shot,
+            input_image=first_frame,
+            last_frame_image=last_frame,
+            motion_prompt=motion_prompt,
+            model="wan",
+        )
+
+    # ---- Internal: Wan2.2 I2V ----
+
+    def _generate_wan(
+        self,
+        shot: UnifiedShot,
+        first_frame: str,
+        last_frame: Optional[str],
+        motion_prompt: str,
+        frame_count: Optional[int],
+        fps: int,
+    ) -> Dict[str, Any]:
+        """Build Wan2.2 I2V workflow with first/last frame support."""
+        if not self._wan_template:
+            raise RuntimeError("Wan2.2 template not loaded")
+
+        wf = copy.deepcopy(self._wan_template)
+
+        # Resolution from shot type
+        shot_type = str(getattr(shot, "camera", "medium")).lower()
+        width, height = RESOLUTION_PRESETS.get(shot_type, (1344, 768))
+
+        # Frame count from duration
+        if frame_count is None:
+            dur = getattr(shot, "duration", 5.0)
+            frame_count = int(dur * fps)
+        frame_count = max(16, min(frame_count, 144))  # Clamp 16-144 frames
+
+        # Seed
+        seed = shot.seed if shot.seed >= 0 else int(os.urandom(4).hex(), 16) % (2**31)
+
+        # Inject into template nodes
+        self._inject(wf, WAN_NODE_LOAD_IMAGE_FIRST, "image", first_frame)
+        if last_frame:
+            self._inject(wf, WAN_NODE_LOAD_IMAGE_LAST, "image", last_frame)
+
+        # Motion prompt
+        if motion_prompt:
+            self._inject(wf, WAN_NODE_SET_FIRST, "motion_prompt", motion_prompt)
+
+        # Model params
+        self._inject(wf, WAN_NODE_SAMPLE, "width", width)
+        self._inject(wf, WAN_NODE_SAMPLE, "height", height)
+        self._inject(wf, WAN_NODE_SAMPLE, "frame_count", frame_count)
+        self._inject(wf, WAN_NODE_SAMPLE, "seed", seed)
+        self._inject(wf, WAN_NODE_SAMPLE, "steps", getattr(shot, "steps", 30))
+        self._inject(wf, WAN_NODE_SAMPLE, "cfg", getattr(shot, "cfg", 5.0))
+
+        # Output
+        prefix = f"v_p{getattr(shot, 'chapter', 1):02d}_s{getattr(shot, 'scene', 1):02d}_sh{getattr(shot, 'shot', 1):03d}"
+        self._inject(wf, WAN_NODE_SAVE, "filename_prefix", prefix)
+
+        logger.info(
+            f"I2VGenerator[Wan2.2]: shot={shot.shot_id}, "
+            f"frames={frame_count}, fps={fps}, resolution={width}x{height}"
+        )
+        return wf
+
+    # ---- Internal: AnimateDiff I2V ----
+
+    def _generate_animatediff(
+        self,
+        shot: UnifiedShot,
+        input_image: str,
+        motion_prompt: str,
+        frame_count: Optional[int],
+        fps: int,
+    ) -> Dict[str, Any]:
+        """Build AnimateDiff I2V workflow (fallback)."""
+        if not self._ad_template:
+            raise RuntimeError("AnimateDiff template not loaded")
+
+        wf = copy.deepcopy(self._ad_template)
+
+        # Resolution
+        shot_type = str(getattr(shot, "camera", "medium")).lower()
+        width, height = RESOLUTION_PRESETS.get(shot_type, (1344, 768))
+
+        # Frame count
+        if frame_count is None:
+            dur = getattr(shot, "duration", 5.0)
+            frame_count = int(dur * fps)
+        frame_count = max(16, min(frame_count, 64))  # AnimateDiff max ~64 frames
+
+        # Seed
+        seed = shot.seed if shot.seed >= 0 else int(os.urandom(4).hex(), 16) % (2**31)
+
+        # Image
+        self._inject(wf, NODE_LOAD_IMAGE, "image", input_image)
+
+        # Prompts 鈥?inject motion prompt into positive
+        base_pos = _build_positive_prompt(shot)
+        if motion_prompt:
+            base_pos += f", {motion_prompt}"
+        base_pos += ", smooth animation, consistent character, cinematic quality"
+
+        base_neg = _build_negative_prompt(shot) if hasattr(_, '_build_negative_prompt') else (
+            "worst quality, low quality, blurry, disfigured, bad anatomy, "
+            "extra limbs, jitter, flickering, morphing, distortion"
+        )
+        if motion_prompt:
+            base_neg += ", static, frozen"
+
+        self._inject(wf, NODE_CLIP_POS, "text", base_pos)
+        self._inject(wf, NODE_CLIP_NEG, "text", base_neg)
+
+        # Sampler
+        self._inject(wf, NODE_SAMPLER, "seed", seed)
+        self._inject(wf, NODE_SAMPLER, "steps", getattr(shot, "steps", 20))
+        self._inject(wf, NODE_SAMPLER, "cfg", getattr(shot, "cfg", 7.5))
+
+        # Context
+        self._inject(wf, NODE_CONTEXT, "context_length", frame_count)
+        self._inject(wf, NODE_LATENT_BATCH, "batch_size", frame_count)
+
+        # Output
+        self._inject(wf, NODE_VHS_COMBINE, "frame_rate", fps)
+        prefix = f"v_p{getattr(shot, 'chapter', 1):02d}_s{getattr(shot, 'scene', 1):02d}_sh{getattr(shot, 'shot', 1):03d}"
+        self._inject(wf, NODE_VHS_COMBINE, "filename_prefix", prefix)
+
+        logger.info(
+            f"I2VGenerator[AD]: shot={shot.shot_id}, "
+            f"frames={frame_count}, fps={fps}"
+        )
+        return wf
+
+    # ---- Helpers ----
+
+    def _detect_best_model(self, has_last_frame: bool) -> str:
+        """Auto-detect best available model."""
+        if has_last_frame and self._wan_template:
+            return "wan"
+        if self._wan_template:
+            return "wan"
+        if self._ad_template:
+            return "animatediff"
+        raise RuntimeError("No I2V templates available")
+
+    @staticmethod
+    def _inject(wf: Dict[str, Any], node_id: int, key: str, value: Any) -> None:
+        """Inject a value into a workflow node's inputs."""
+        node_key = str(node_id)
+        if node_key in wf and "inputs" in wf[node_key]:
+            wf[node_key]["inputs"][key] = value
+
+    @staticmethod
+    def get_install_guide() -> str:
+        """Installation guide for video models."""
+        return (
+            "Video Generation 妯″瀷瀹夎鎸囧崡锛歕n"
+            "鈹佲攣鈹乗n"
+            "1. Wan2.2 I2V (鎺ㄨ崘):\n"
+            "   - git clone https://github.com/GujieCode/ComfyUI-Wan22 "
+            "D:\\ComfyUI_new\\custom_nodes\\ComfyUI-Wan22\n"
+            "   - 涓嬭浇 Wan2.2 I2V 妯″瀷 鈫?D:\\ComfyUI_new\\models\\diffusion_models\\\n"
+            "   - 闇€瑕?first_frame + last_frame 鍙傝€冨浘\n\n"
+            "2. AnimateDiff (澶囩敤):\n"
+            "   - 宸插畨瑁? ComfyUI-AnimateDiff-Evolved\n"
+            "   - 宸插畨瑁? ComfyUI-VideoHelperSuite\n"
+            "   - 涓嬭浇 motion 妯″潡 鈫?D:\\ComfyUI_new\\models\\animatediff_models\\\n"
+        )

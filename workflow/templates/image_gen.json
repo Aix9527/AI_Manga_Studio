@@ -1,0 +1,68 @@
+{
+  "_description": "SDXL image generation workflow. Optimized for anatomical stability: CFG=5.0, native-area resolution. Python injects prompts, seed, and resolution.",
+  "_nodes": "1=Checkpoint, 2=CLIP+, 3=CLIP-, 4=Latent, 5=KSampler, 6=VAEDecode, 7=Save",
+  "_python_injects": [
+    "2.inputs.text = positive prompt",
+    "3.inputs.text = negative prompt",
+    "4.inputs.width / height = resolution",
+    "5.inputs.seed / steps / cfg = sampler params",
+    "7.inputs.filename_prefix = output prefix"
+  ],
+  "1": {
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple"
+  },
+  "2": {
+    "inputs": {
+      "text": "",
+      "clip": ["1", 1]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "3": {
+    "inputs": {
+      "text": "",
+      "clip": ["1", 1]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "4": {
+    "inputs": {
+      "width": 1344,
+      "height": 768,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage"
+  },
+  "5": {
+    "inputs": {
+      "seed": 0,
+      "steps": 30,
+      "cfg": 5.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["1", 0],
+      "positive": ["2", 0],
+      "negative": ["3", 0],
+      "latent_image": ["4", 0]
+    },
+    "class_type": "KSampler"
+  },
+  "6": {
+    "inputs": {
+      "samples": ["5", 0],
+      "vae": ["1", 2]
+    },
+    "class_type": "VAEDecode"
+  },
+  "7": {
+    "inputs": {
+      "filename_prefix": "shot_",
+      "images": ["6", 0]
+    },
+    "class_type": "SaveImage"
+  }
+}
