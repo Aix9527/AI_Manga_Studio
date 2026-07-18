@@ -164,6 +164,39 @@ def test_unexpected_exception_uses_retry_path_and_does_not_leave_running(job_rep
     assert worker.run_once() is False
 
 
+def test_cancel_requested_after_post_run_check_wins_atomically_over_failure(
+    job_repo, monkeypatch
+):
+    job = create_job(job_repo, "cancel-failure-race")
+    completed = insert_step(job_repo, job["id"], status="completed")
+    failing = insert_step(job_repo, job["id"], sequence=1)
+    original_current_step_id = job_repo.current_step_id
+    race_triggered = False
+
+    def cancel_before_failure_transaction(job_id):
+        nonlocal race_triggered
+        race_triggered = True
+        set_job(job_repo, job_id, desired_state="cancelled")
+        return original_current_step_id(job_id)
+
+    monkeypatch.setattr(job_repo, "current_step_id", cancel_before_failure_transaction)
+    worker = DurableWorker(job_repo, AlwaysFails(job_repo), retry_delays=[0])
+
+    assert worker.run_once() is True
+
+    restored = job_repo.get_job(job["id"])
+    steps = {step["id"]: step for step in restored["steps"]}
+    assert race_triggered is True
+    assert restored["status"] == "cancelled"
+    assert restored["worker_id"] is restored["lease_until"] is None
+    assert restored["run_after"] is None
+    assert restored["finished_at"] is not None
+    assert steps[completed]["status"] == "completed"
+    assert steps[failing]["status"] == "cancelled"
+    assert steps[failing]["attempt"] == 0
+    assert steps[failing]["error_code"] == steps[failing]["error_message"] == ""
+
+
 def test_run_once_returns_false_when_no_job(job_repo):
     worker = DurableWorker(job_repo, AlwaysFails(job_repo), retry_delays=[])
 

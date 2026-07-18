@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import backend.orchestration.repository as repository_module
+
 from conftest import create_job, insert_step, set_job
 
 
@@ -154,3 +156,25 @@ def test_finalize_cancel_requires_desired_cancelled_and_is_idempotent(job_repo):
     assert restored["status"] == "cancelled"
     assert statuses[completed] == "completed"
     assert statuses[queued] == "cancelled"
+
+
+def test_repeated_finalize_cancel_does_not_rewrite_persisted_state(
+    job_repo, monkeypatch
+):
+    job = create_job(job_repo, "durable-idempotent-cancel")
+    insert_step(job_repo, job["id"], status="completed")
+    insert_step(job_repo, job["id"], sequence=1)
+    set_job(job_repo, job["id"], desired_state="cancelled")
+
+    assert job_repo.finalize_cancel(job["id"]) is True
+    first = job_repo.get_job(job["id"])
+    monkeypatch.setattr(
+        repository_module,
+        "utcnow",
+        lambda: "2099-01-01T00:00:00+00:00",
+    )
+
+    assert job_repo.finalize_cancel(job["id"]) is True
+    second = job_repo.get_job(job["id"])
+
+    assert second == first

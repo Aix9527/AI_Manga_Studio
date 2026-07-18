@@ -376,6 +376,28 @@ class JobRepository:
             if step is None:
                 raise KeyError(f"step {step_id!r} does not belong to job {job_id!r}")
 
+            if job["desired_state"] == "cancelled":
+                timestamp = utcnow()
+                connection.execute(
+                    """
+                    UPDATE job_steps SET status = 'cancelled', finished_at = ?
+                    WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')
+                    """,
+                    (timestamp, job_id),
+                )
+                connection.execute(
+                    """
+                    UPDATE jobs
+                    SET status = 'cancelled', message = '已取消', run_after = NULL,
+                        worker_id = NULL, lease_until = NULL, finished_at = ?,
+                        updated_at = ?
+                    WHERE id = ? AND status = 'running' AND worker_id = ?
+                      AND desired_state = 'cancelled'
+                    """,
+                    (timestamp, timestamp, job_id, worker_id),
+                )
+                return False, int(step["attempt"])
+
             attempt = int(step["attempt"]) + 1
             exhausted = attempt > max_retries
             step_status = "failed" if exhausted else "retry_wait"
@@ -424,10 +446,12 @@ class JobRepository:
     def finalize_cancel(self, job_id: str) -> bool:
         with self.database.transaction() as connection:
             job = connection.execute(
-                "SELECT desired_state FROM jobs WHERE id = ?", (job_id,)
+                "SELECT status, desired_state FROM jobs WHERE id = ?", (job_id,)
             ).fetchone()
             if job is None or job["desired_state"] != "cancelled":
                 return False
+            if job["status"] == "cancelled":
+                return True
             timestamp = utcnow()
             connection.execute(
                 """
