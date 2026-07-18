@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Barrier
 
 import pytest
@@ -8,6 +9,114 @@ import pytest
 from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.repository import JobRepository
 from backend.orchestration.schemas import JobCreate
+
+
+MIGRATIONS_DIR = (
+    Path(__file__).parents[2] / "backend" / "orchestration" / "migrations"
+)
+
+
+def _create_legacy_v1_database(database_path):
+    schema = (MIGRATIONS_DIR / "001_jobs.sql").read_text(encoding="utf-8")
+    schema = schema.replace(
+        "validated_at TEXT NOT NULL,",
+        "validated_at TEXT,",
+    ).replace(
+        "ON job_events(job_id, id);",
+        "ON job_events(job_id);",
+    )
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.executescript(schema)
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, ?)",
+            ("2026-01-01T00:00:00+00:00",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _insert_job(connection, job_id):
+    connection.execute(
+        """
+        INSERT INTO jobs(
+            id, project_id, input_path, input_type, mode, status,
+            settings_json, idempotency_key, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            job_id,
+            f"project-{job_id}",
+            f"{job_id}.txt",
+            "novel",
+            "automatic",
+            "queued",
+            "{}",
+            f"key-{job_id}-0000",
+            "2026-01-01T00:00:00+00:00",
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
+
+
+def _insert_step(connection, step_id, job_id, sequence=1):
+    connection.execute(
+        """
+        INSERT INTO job_steps(id, job_id, sequence, stage_key, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (step_id, job_id, sequence, "storyboard", "pending"),
+    )
+
+
+def _insert_artifact(
+    connection,
+    artifact_id,
+    job_id,
+    step_id,
+    *,
+    validated_at="2026-01-01T00:00:00+00:00",
+):
+    connection.execute(
+        """
+        INSERT INTO artifacts(
+            id, job_id, step_id, kind, path, sha256, size,
+            metadata_json, validated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            artifact_id,
+            job_id,
+            step_id,
+            "image",
+            f"output/{artifact_id}.png",
+            "abc123",
+            42,
+            "{}",
+            validated_at,
+        ),
+    )
+
+
+def _insert_review_action(connection, action_id, job_id, step_id):
+    connection.execute(
+        """
+        INSERT INTO review_actions(
+            id, job_id, step_id, action, comment, patch_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            action_id,
+            job_id,
+            step_id,
+            "approve",
+            "",
+            "{}",
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
 
 
 def _request(*, project_id="p1", idempotency_key="job-key-0001"):
@@ -161,7 +270,7 @@ def test_migration_version_is_recorded_once_across_reopens(tmp_path):
     with second.connection() as connection:
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
 
-    assert [row["version"] for row in versions] == [1]
+    assert [row["version"] for row in versions] == [1, 2]
     assert foreign_keys == 1
 
 
@@ -176,14 +285,9 @@ def test_event_cursor_index_uses_job_id_then_event_id(tmp_path):
     assert [row["name"] for row in columns] == ["job_id", "id"]
 
 
-def test_reopen_replaces_legacy_event_index_without_new_migration_version(tmp_path):
+def test_v2_replaces_legacy_event_index(tmp_path):
     database_path = tmp_path / "orchestration.db"
-    database = OrchestrationDatabase(database_path)
-    with database.transaction() as connection:
-        connection.execute("DROP INDEX idx_events_job_id")
-        connection.execute(
-            "CREATE INDEX idx_events_job_id ON job_events(job_id)"
-        )
+    _create_legacy_v1_database(database_path)
 
     reopened = OrchestrationDatabase(database_path)
     with reopened.connection() as connection:
@@ -195,7 +299,7 @@ def test_reopen_replaces_legacy_event_index_without_new_migration_version(tmp_pa
         ).fetchall()
 
     assert [row["name"] for row in columns] == ["job_id", "id"]
-    assert [row["version"] for row in versions] == [1]
+    assert [row["version"] for row in versions] == [1, 2]
 
 
 def test_reopen_does_not_rebuild_correct_event_index(tmp_path):
@@ -233,3 +337,187 @@ def test_artifact_validation_timestamp_is_required_text(tmp_path):
     assert validated_at == [
         {"name": "validated_at", "type": "TEXT", "notnull": 1}
     ]
+
+
+def test_v2_upgrades_legacy_artifacts_and_preserves_validated_rows(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    _create_legacy_v1_database(database_path)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        _insert_job(connection, "job-1")
+        _insert_step(connection, "step-1", "job-1")
+        _insert_artifact(connection, "artifact-1", "job-1", "step-1")
+
+    upgraded = OrchestrationDatabase(database_path)
+    with upgraded.connection() as connection:
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        validated_at = next(
+            row
+            for row in connection.execute("PRAGMA table_info('artifacts')")
+            if row["name"] == "validated_at"
+        )
+        artifact = connection.execute(
+            "SELECT validated_at FROM artifacts WHERE id = 'artifact-1'"
+        ).fetchone()
+        artifact_foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list('artifacts')"
+        ).fetchall()
+
+    composite_groups = {}
+    for row in artifact_foreign_keys:
+        if row["table"] == "job_steps":
+            composite_groups.setdefault(row["id"], []).append(
+                (row["seq"], row["from"], row["to"], row["on_delete"])
+            )
+
+    assert [row["version"] for row in versions] == [1, 2]
+    assert validated_at["type"] == "TEXT"
+    assert validated_at["notnull"] == 1
+    assert artifact["validated_at"] == "2026-01-01T00:00:00+00:00"
+    assert any(
+        sorted(group)
+        == [
+            (0, "job_id", "job_id", "CASCADE"),
+            (1, "step_id", "id", "CASCADE"),
+        ]
+        for group in composite_groups.values()
+    )
+
+
+def test_v2_rejects_null_validation_without_partial_upgrade(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    _create_legacy_v1_database(database_path)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        _insert_job(connection, "job-1")
+        _insert_step(connection, "step-1", "job-1")
+        _insert_artifact(
+            connection,
+            "artifact-null",
+            "job-1",
+            "step-1",
+            validated_at=None,
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="validated_at"):
+        OrchestrationDatabase(database_path)
+
+    connection = sqlite3.connect(database_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        validated_at = next(
+            row
+            for row in connection.execute("PRAGMA table_info('artifacts')")
+            if row["name"] == "validated_at"
+        )
+        artifact = connection.execute(
+            "SELECT validated_at FROM artifacts WHERE id = 'artifact-null'"
+        ).fetchone()
+        partial_tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE name LIKE '%_v2'"
+        ).fetchall()
+    finally:
+        connection.close()
+
+    assert [row["version"] for row in versions] == [1]
+    assert validated_at["notnull"] == 0
+    assert artifact["validated_at"] is None
+    assert partial_tables == []
+
+
+def test_artifacts_and_reviews_require_step_from_same_job(tmp_path):
+    database = OrchestrationDatabase(tmp_path / "orchestration.db")
+    with database.transaction() as connection:
+        _insert_job(connection, "job-1")
+        _insert_job(connection, "job-2")
+        _insert_step(connection, "step-1", "job-1")
+        _insert_step(connection, "step-2", "job-2")
+
+    with database.transaction() as connection:
+        _insert_artifact(connection, "artifact-match", "job-1", "step-1")
+        _insert_review_action(connection, "review-match", "job-1", "step-1")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with database.transaction() as connection:
+            _insert_artifact(connection, "artifact-cross", "job-1", "step-2")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with database.transaction() as connection:
+            _insert_review_action(connection, "review-cross", "job-1", "step-2")
+
+
+def test_failed_migration_rolls_back_schema_and_version(tmp_path):
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "001_base.sql").write_text(
+        """
+        CREATE TABLE schema_migrations(
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
+        CREATE TABLE stable(id INTEGER PRIMARY KEY);
+        """,
+        encoding="utf-8",
+    )
+    (migrations_dir / "003_broken.sql").write_text(
+        """
+        CREATE TABLE partial(id INTEGER PRIMARY KEY);
+        THIS IS INVALID SQL;
+        """,
+        encoding="utf-8",
+    )
+    database_path = tmp_path / "orchestration.db"
+
+    with pytest.raises(sqlite3.OperationalError):
+        OrchestrationDatabase(database_path, migrations_dir=migrations_dir)
+
+    connection = sqlite3.connect(database_path)
+    try:
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        connection.execute("SELECT 1")
+    finally:
+        connection.close()
+
+    assert [row[0] for row in versions] == [1]
+    assert "stable" in tables
+    assert "partial" not in tables
+
+
+def test_connect_closes_connection_when_pragma_fails(tmp_path, monkeypatch):
+    class FailingConnection:
+        row_factory = None
+
+        def __init__(self):
+            self.closed = False
+
+        def execute(self, _sql):
+            raise sqlite3.OperationalError("pragma failed")
+
+        def close(self):
+            self.closed = True
+
+    failing_connection = FailingConnection()
+    monkeypatch.setattr(
+        "backend.orchestration.database.sqlite3.connect",
+        lambda *_args, **_kwargs: failing_connection,
+    )
+    database = object.__new__(OrchestrationDatabase)
+    database.path = tmp_path / "orchestration.db"
+
+    with pytest.raises(sqlite3.OperationalError, match="pragma failed"):
+        database.connect()
+
+    assert failing_connection.closed is True
