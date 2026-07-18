@@ -59,6 +59,17 @@ LEGAL_JOB_TRANSITIONS = {
 }
 
 
-def assert_transition(current: JobStatus, target: JobStatus) -> None:
-    if target not in LEGAL_JOB_TRANSITIONS[current]:
-        raise ValueError(f"illegal job transition: {current} -> {target}")
+def _normalize_job_status(value: JobStatus | str) -> JobStatus:
+    try:
+        return JobStatus(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"unknown job status: {value}") from None
+
+
+def assert_transition(current: JobStatus | str, target: JobStatus | str) -> None:
+    normalized_current = _normalize_job_status(current)
+    normalized_target = _normalize_job_status(target)
+    if normalized_target not in LEGAL_JOB_TRANSITIONS[normalized_current]:
+        raise ValueError(
+            f"illegal job transition: {normalized_current} -> {normalized_target}"
+        )

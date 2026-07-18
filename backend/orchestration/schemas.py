@@ -11,6 +11,7 @@ from backend.orchestration.enums import JobStatus, StepStatus
 
 InputType = Literal["novel", "script", "storyboard"]
 JobMode = Literal["automatic", "manual_review"]
+_WINDOWS_DEVICE_DIGIT_TRANSLATION = str.maketrans("¹²³", "123")
 
 
 class JobCreate(BaseModel):
@@ -61,7 +62,12 @@ class JobCreate(BaseModel):
         ):
             raise ValueError("project name contains unsafe path characters")
 
-        reserved_stem = cleaned.split(".", 1)[0].rstrip(" ").upper()
+        reserved_stem = (
+            cleaned.split(".", 1)[0]
+            .rstrip(" ")
+            .upper()
+            .translate(_WINDOWS_DEVICE_DIGIT_TRANSLATION)
+        )
         if cleaned.rstrip(" .") != cleaned or reserved_stem in reserved:
             raise ValueError("project name is not a valid Windows folder")
         return cleaned
@@ -72,8 +78,8 @@ class JobStepView(BaseModel):
     stage_key: str
     shot_id: str | None = None
     status: StepStatus
-    attempt: int
-    progress: float
+    attempt: int = Field(ge=0)
+    progress: float = Field(ge=0.0, le=1.0)
     error_code: str = ""
     error_message: str = ""
 
@@ -83,10 +89,13 @@ class JobView(BaseModel):
     project_id: str
     status: JobStatus
     mode: JobMode
-    desired_state: str = "running"
+    desired_state: str = Field(
+        default="running",
+        pattern=r"^(running|paused|cancelled)$",
+    )
     current_stage: str = ""
     current_shot: str = ""
-    progress: float = 0.0
+    progress: float = Field(default=0.0, ge=0.0, le=1.0)
     message: str = ""
     final_video: str = ""
     created_at: datetime

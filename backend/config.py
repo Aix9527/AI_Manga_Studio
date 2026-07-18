@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -129,12 +129,35 @@ class SchedulerConfig(BaseModel):
 
 
 class OrchestrationConfig(BaseModel):
-    database_path: str = str(PROJECT_ROOT / "database" / "orchestration.db")
-    worker_poll_seconds: float = 0.5
-    lease_seconds: int = 30
-    heartbeat_seconds: int = 10
-    max_retries: int = 3
+    database_path: str = Field(
+        default=str(PROJECT_ROOT / "database" / "orchestration.db"),
+        min_length=1,
+    )
+    worker_poll_seconds: float = Field(default=0.5, gt=0)
+    lease_seconds: int = Field(default=30, gt=0)
+    heartbeat_seconds: int = Field(default=10, gt=0)
+    max_retries: int = Field(default=3, ge=0)
     retry_delays_seconds: List[int] = Field(default_factory=lambda: [5, 15, 45])
+
+    @field_validator("database_path", mode="before")
+    @classmethod
+    def trim_database_path(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("retry_delays_seconds")
+    @classmethod
+    def require_nonnegative_retry_delays(cls, value: List[int]) -> List[int]:
+        if any(delay < 0 for delay in value):
+            raise ValueError("retry delays must be nonnegative")
+        return value
+
+    @model_validator(mode="after")
+    def validate_timing_and_retry_policy(self) -> "OrchestrationConfig":
+        if self.max_retries > 0 and not self.retry_delays_seconds:
+            raise ValueError("retry delays are required when retries are enabled")
+        if self.heartbeat_seconds >= self.lease_seconds:
+            raise ValueError("heartbeat_seconds must be less than lease_seconds")
+        return self
 
 
 class PathsConfig(BaseModel):
