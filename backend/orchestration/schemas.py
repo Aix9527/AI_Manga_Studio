@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
+from unicodedata import category
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -34,7 +35,11 @@ class JobCreate(BaseModel):
     @field_validator("project_id", mode="before")
     @classmethod
     def trim_project_id(cls, value: Any) -> Any:
-        return value.strip() if isinstance(value, str) else value
+        if isinstance(value, str):
+            if any(category(char) == "Cc" for char in value):
+                raise ValueError("project name contains control characters")
+            return value.strip()
+        return value
 
     @field_validator("project_id")
     @classmethod
@@ -52,7 +57,7 @@ class JobCreate(BaseModel):
         if (
             not cleaned
             or cleaned in {".", ".."}
-            or any(char in forbidden or ord(char) < 32 for char in cleaned)
+            or any(char in forbidden for char in cleaned)
         ):
             raise ValueError("project name contains unsafe path characters")
 

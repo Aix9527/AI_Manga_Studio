@@ -132,9 +132,9 @@ class OrchestrationConfig(BaseModel):
     database_path: str = str(PROJECT_ROOT / "database" / "orchestration.db")
     worker_poll_seconds: float = 0.5
     lease_seconds: int = 30
-    heartbeat_interval_seconds: int = 10
+    heartbeat_seconds: int = 10
     max_retries: int = 3
-    retry_backoff_seconds: List[int] = Field(default_factory=lambda: [5, 15, 45])
+    retry_delays_seconds: List[int] = Field(default_factory=lambda: [5, 15, 45])
 
 
 class PathsConfig(BaseModel):

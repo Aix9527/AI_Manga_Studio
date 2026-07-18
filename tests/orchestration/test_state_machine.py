@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 import backend.config as config_module
-from backend.config import AppConfig
+from backend.config import AppConfig, OrchestrationConfig
 from backend.orchestration.enums import JobStatus, assert_transition
 from backend.orchestration.schemas import JobCreate
 
@@ -93,6 +93,14 @@ def test_job_trims_project_id_before_applying_length_limit():
     assert job.project_id == project_id
 
 
+@pytest.mark.parametrize("project_id", ["\tproject", "project\n", "project\x7f"])
+def test_job_rejects_control_characters_in_raw_project_id(project_id):
+    with pytest.raises(ValidationError) as exc_info:
+        _job_create(project_id=project_id)
+
+    assert any(error["loc"] == ("project_id",) for error in exc_info.value.errors())
+
+
 def test_app_config_has_repository_relative_orchestration_database():
     orchestration = AppConfig().orchestration
     expected = (
@@ -102,7 +110,18 @@ def test_app_config_has_repository_relative_orchestration_database():
     )
 
     assert Path(orchestration.database_path) == expected
-    assert orchestration.lease_seconds > 0
-    assert orchestration.heartbeat_interval_seconds > 0
-    assert orchestration.retry_backoff_seconds
-    assert orchestration.max_retries >= 0
+    assert orchestration.worker_poll_seconds == 0.5
+    assert orchestration.lease_seconds == 30
+    assert orchestration.heartbeat_seconds == 10
+    assert orchestration.retry_delays_seconds == [5, 15, 45]
+    assert orchestration.max_retries == 3
+
+
+def test_orchestration_retry_delays_are_isolated_between_instances():
+    first = OrchestrationConfig()
+    second = OrchestrationConfig()
+
+    first.retry_delays_seconds.append(99)
+
+    assert first.retry_delays_seconds == [5, 15, 45, 99]
+    assert second.retry_delays_seconds == [5, 15, 45]
