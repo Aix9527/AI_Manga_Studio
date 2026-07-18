@@ -16,7 +16,7 @@ frontend/.vite/
 database/*.db
 database/*.db-*
 logs/
-cache/
+/cache/
 storage/
 output/
 outputs/
