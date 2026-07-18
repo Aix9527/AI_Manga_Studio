@@ -119,6 +119,19 @@ def _insert_review_action(connection, action_id, job_id, step_id):
     )
 
 
+def _write_minimal_base_migration(migrations_dir, filename="001_base.sql"):
+    (migrations_dir / filename).write_text(
+        """
+        CREATE TABLE schema_migrations(
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
+        CREATE TABLE stable(id INTEGER PRIMARY KEY);
+        """,
+        encoding="utf-8",
+    )
+
+
 def _request(*, project_id="p1", idempotency_key="job-key-0001"):
     return JobCreate(
         project_id=project_id,
@@ -451,29 +464,21 @@ def test_artifacts_and_reviews_require_step_from_same_job(tmp_path):
             _insert_review_action(connection, "review-cross", "job-1", "step-2")
 
 
-def test_failed_migration_rolls_back_schema_and_version(tmp_path):
+def test_migration_cannot_commit_outside_runner_transaction(tmp_path):
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
-    (migrations_dir / "001_base.sql").write_text(
-        """
-        CREATE TABLE schema_migrations(
-            version INTEGER PRIMARY KEY,
-            applied_at TEXT NOT NULL
-        );
-        CREATE TABLE stable(id INTEGER PRIMARY KEY);
-        """,
-        encoding="utf-8",
-    )
+    _write_minimal_base_migration(migrations_dir)
     (migrations_dir / "003_broken.sql").write_text(
         """
-        CREATE TABLE partial(id INTEGER PRIMARY KEY);
+        CREATE TABLE escaped_partial(id INTEGER PRIMARY KEY);
+        COMMIT;
         THIS IS INVALID SQL;
         """,
         encoding="utf-8",
     )
     database_path = tmp_path / "orchestration.db"
 
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(sqlite3.DatabaseError):
         OrchestrationDatabase(database_path, migrations_dir=migrations_dir)
 
     connection = sqlite3.connect(database_path)
@@ -493,7 +498,127 @@ def test_failed_migration_rolls_back_schema_and_version(tmp_path):
 
     assert [row[0] for row in versions] == [1]
     assert "stable" in tables
-    assert "partial" not in tables
+    assert "escaped_partial" not in tables
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["003.sql", "three_fix.sql", "003_.sql", "000_zero.sql"],
+)
+def test_invalid_migration_name_fails_before_database_is_opened(
+    tmp_path, filename
+):
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / filename).write_text("SELECT 1;", encoding="utf-8")
+    database_path = tmp_path / "orchestration.db"
+
+    with pytest.raises(ValueError, match="migration filename"):
+        OrchestrationDatabase(database_path, migrations_dir=migrations_dir)
+
+    assert database_path.exists() is False
+
+
+def test_duplicate_migration_version_fails_before_database_is_opened(tmp_path):
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    _write_minimal_base_migration(migrations_dir, "001_first.sql")
+    _write_minimal_base_migration(migrations_dir, "1_duplicate.sql")
+    database_path = tmp_path / "orchestration.db"
+
+    with pytest.raises(ValueError, match="duplicate migration version"):
+        OrchestrationDatabase(database_path, migrations_dir=migrations_dir)
+
+    assert database_path.exists() is False
+
+
+def test_empty_migration_directory_is_rejected(tmp_path):
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    database_path = tmp_path / "orchestration.db"
+
+    with pytest.raises(ValueError, match="no migration files"):
+        OrchestrationDatabase(database_path, migrations_dir=migrations_dir)
+
+    assert database_path.exists() is False
+
+
+def test_missing_migration_directory_is_rejected(tmp_path):
+    migrations_dir = tmp_path / "missing-migrations"
+    database_path = tmp_path / "orchestration.db"
+
+    with pytest.raises(ValueError, match="migration directory"):
+        OrchestrationDatabase(database_path, migrations_dir=migrations_dir)
+
+    assert database_path.exists() is False
+
+
+def test_unversioned_partial_database_is_rejected(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE jobs(id TEXT PRIMARY KEY)")
+
+    with pytest.raises(RuntimeError, match="unversioned database"):
+        OrchestrationDatabase(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+
+    assert tables == {"jobs"}
+
+
+def test_empty_migration_history_with_partial_database_is_rejected(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE schema_migrations(
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute("CREATE TABLE jobs(id TEXT PRIMARY KEY)")
+
+    with pytest.raises(RuntimeError, match="empty migration history"):
+        OrchestrationDatabase(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations"
+        ).fetchall()
+        jobs_columns = connection.execute("PRAGMA table_info('jobs')").fetchall()
+
+    assert versions == []
+    assert [row[1] for row in jobs_columns] == ["id"]
+
+
+def test_unknown_applied_migration_version_is_rejected(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    database = OrchestrationDatabase(database_path)
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (99, ?)",
+            ("2026-01-01T00:00:00+00:00",),
+        )
+
+    with pytest.raises(RuntimeError, match="migration history"):
+        OrchestrationDatabase(database_path)
+
+
+def test_applied_migration_versions_must_include_every_prefix(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    database = OrchestrationDatabase(database_path)
+    with database.transaction() as connection:
+        connection.execute("DELETE FROM schema_migrations WHERE version = 1")
+
+    with pytest.raises(RuntimeError, match="migration history"):
+        OrchestrationDatabase(database_path)
 
 
 def test_connect_closes_connection_when_pragma_fails(tmp_path, monkeypatch):
