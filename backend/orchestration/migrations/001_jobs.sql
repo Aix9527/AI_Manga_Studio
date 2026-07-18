@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     sha256 TEXT NOT NULL,
     size INTEGER NOT NULL,
     metadata_json TEXT NOT NULL,
-    validated_at TEXT,
+    validated_at TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
     UNIQUE(step_id, kind, path)
 );

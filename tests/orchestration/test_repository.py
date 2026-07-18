@@ -213,3 +213,23 @@ def test_reopen_does_not_rebuild_correct_event_index(tmp_path):
         ).fetchone()[0]
 
     assert schema_version_after == schema_version_before
+
+
+def test_artifact_validation_timestamp_is_required_text(tmp_path):
+    database = OrchestrationDatabase(tmp_path / "orchestration.db")
+
+    with database.connection() as connection:
+        columns = connection.execute("PRAGMA table_info('artifacts')").fetchall()
+
+    validated_at = [
+        {
+            "name": row["name"],
+            "type": row["type"],
+            "notnull": row["notnull"],
+        }
+        for row in columns
+        if row["name"] == "validated_at"
+    ]
+    assert validated_at == [
+        {"name": "validated_at", "type": "TEXT", "notnull": 1}
+    ]
