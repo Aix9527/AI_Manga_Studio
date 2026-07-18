@@ -216,8 +216,7 @@ class JobRepository:
             )
 
     def reconcile_checkpoints(self) -> int:
-        connection = self.database.connect()
-        try:
+        with self.database.connection() as connection:
             rows = connection.execute(
                 """
                 SELECT job_id, step_id, kind, path, sha256, size
@@ -225,8 +224,6 @@ class JobRepository:
                 WHERE active = 1
                 """
             ).fetchall()
-        finally:
-            connection.close()
 
         invalid_roots: set[tuple[str, str]] = set()
         for row in rows:

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from contextlib import contextmanager
 
 import pytest
 
@@ -282,6 +283,28 @@ def test_reconcile_bad_shot_preserves_other_shot_and_resets_job(
     assert restored_job["run_after"] is None
     assert restored_job["finished_at"] is None
     assert restored_job["message"] == "检测到检查点损坏，已从受影响步骤恢复"
+
+
+def test_reconcile_reads_artifacts_through_managed_connection(
+    repository_and_job, monkeypatch
+):
+    database, repository, _job = repository_and_job
+    original_connection = database.connection
+    managed = {"entered": 0, "exited": 0}
+
+    @contextmanager
+    def counted_connection():
+        managed["entered"] += 1
+        try:
+            with original_connection() as connection:
+                yield connection
+        finally:
+            managed["exited"] += 1
+
+    monkeypatch.setattr(database, "connection", counted_connection)
+
+    assert repository.reconcile_checkpoints() == 0
+    assert managed == {"entered": 1, "exited": 1}
 
 
 def test_reconcile_counts_invalid_steps_once_and_merges_roots_per_job(
