@@ -26,6 +26,10 @@ def rowdict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
 
+class LeaseOwnershipError(RuntimeError):
+    """Raised when a worker tries to mutate a job it no longer owns."""
+
+
 class JobRepository:
     def __init__(self, database: OrchestrationDatabase):
         self.database = database
@@ -150,6 +154,7 @@ class JobRepository:
         step_id: str,
         step_input_hash: str,
         artifacts: Iterable[ArtifactDraft],
+        expected_worker_id: str | None = None,
     ) -> None:
         drafts = list(artifacts)
         if not drafts:
@@ -172,6 +177,18 @@ class JobRepository:
 
         timestamp = utcnow()
         with self.database.transaction() as connection:
+            if expected_worker_id is not None:
+                owned = connection.execute(
+                    """
+                    SELECT 1 FROM jobs
+                    WHERE id = ? AND status = 'running' AND worker_id = ?
+                    """,
+                    (job_id, expected_worker_id),
+                ).fetchone()
+                if owned is None:
+                    raise LeaseOwnershipError(
+                        f"worker {expected_worker_id!r} no longer owns job {job_id!r}"
+                    )
             step = connection.execute(
                 "SELECT id FROM job_steps WHERE id = ? AND job_id = ?",
                 (step_id, job_id),
@@ -225,6 +242,348 @@ class JobRepository:
                 for draft, identity in zip(drafts, identities, strict=True)
             ):
                 raise ValueError("artifact checkpoint changed during completion")
+
+    def claim_next(
+        self,
+        worker_id: str,
+        now: str,
+        lease_until: str,
+    ) -> dict[str, Any] | None:
+        claimed_id: str | None = None
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT id FROM jobs
+                WHERE desired_state = 'running'
+                  AND (
+                    status = 'queued'
+                    OR (
+                        status = 'retry_wait'
+                        AND run_after IS NOT NULL
+                        AND run_after <= ?
+                    )
+                  )
+                ORDER BY created_at ASC, id ASC
+                LIMIT 1
+                """,
+                (now,),
+            ).fetchone()
+            if row is None:
+                return None
+            changed = connection.execute(
+                """
+                UPDATE jobs
+                SET status = 'running', worker_id = ?, lease_until = ?,
+                    updated_at = ?
+                WHERE id = ? AND desired_state = 'running'
+                  AND (
+                    status = 'queued'
+                    OR (
+                        status = 'retry_wait'
+                        AND run_after IS NOT NULL
+                        AND run_after <= ?
+                    )
+                  )
+                """,
+                (worker_id, lease_until, now, row["id"], now),
+            ).rowcount
+            if changed:
+                claimed_id = str(row["id"])
+        return self.get_job(claimed_id) if claimed_id is not None else None
+
+    def renew_lease(
+        self,
+        job_id: str,
+        worker_id: str,
+        now: str,
+        lease_until: str,
+    ) -> bool:
+        with self.database.transaction() as connection:
+            changed = connection.execute(
+                """
+                UPDATE jobs
+                SET lease_until = ?, updated_at = ?
+                WHERE id = ? AND status = 'running' AND worker_id = ?
+                  AND lease_until IS NOT NULL AND lease_until > ?
+                """,
+                (lease_until, now, job_id, worker_id, now),
+            ).rowcount
+        return bool(changed)
+
+    def recover_expired_leases(self, now: str) -> int:
+        with self.database.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT id FROM jobs
+                WHERE status = 'running' AND lease_until IS NOT NULL
+                  AND lease_until <= ?
+                ORDER BY created_at ASC, id ASC
+                """,
+                (now,),
+            ).fetchall()
+            job_ids = [str(row["id"]) for row in rows]
+            if not job_ids:
+                return 0
+            placeholders = ",".join("?" for _ in job_ids)
+            connection.execute(
+                f"""
+                UPDATE job_steps
+                SET status = 'queued', started_at = NULL, finished_at = NULL
+                WHERE job_id IN ({placeholders})
+                  AND status IN ('running', 'retry_wait')
+                """,
+                job_ids,
+            )
+            connection.execute(
+                f"""
+                UPDATE jobs
+                SET status = 'queued', worker_id = NULL, lease_until = NULL,
+                    run_after = NULL, message = ?, updated_at = ?
+                WHERE id IN ({placeholders}) AND status = 'running'
+                """,
+                ("已从中断的检查点恢复", now, *job_ids),
+            )
+            return len(job_ids)
+
+    def fail_or_retry_step(
+        self,
+        job_id: str,
+        step_id: str,
+        code: str,
+        message: str,
+        max_retries: int,
+        retry_at: str | None,
+        worker_id: str,
+    ) -> tuple[bool, int]:
+        if max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                """
+                SELECT desired_state FROM jobs
+                WHERE id = ? AND status = 'running' AND worker_id = ?
+                """,
+                (job_id, worker_id),
+            ).fetchone()
+            if job is None:
+                raise LeaseOwnershipError(
+                    f"worker {worker_id!r} no longer owns job {job_id!r}"
+                )
+            step = connection.execute(
+                "SELECT attempt FROM job_steps WHERE id = ? AND job_id = ?",
+                (step_id, job_id),
+            ).fetchone()
+            if step is None:
+                raise KeyError(f"step {step_id!r} does not belong to job {job_id!r}")
+
+            attempt = int(step["attempt"]) + 1
+            exhausted = attempt > max_retries
+            step_status = "failed" if exhausted else "retry_wait"
+            if exhausted:
+                job_status = "failed"
+            elif job["desired_state"] == "paused":
+                job_status = "paused"
+            else:
+                job_status = "retry_wait"
+            effective_retry_at = retry_at if job_status == "retry_wait" else None
+            connection.execute(
+                """
+                UPDATE job_steps
+                SET attempt = ?, status = ?, error_code = ?, error_message = ?
+                WHERE id = ? AND job_id = ?
+                """,
+                (attempt, step_status, code, message, step_id, job_id),
+            )
+            connection.execute(
+                """
+                UPDATE jobs
+                SET status = ?, message = ?, run_after = ?, worker_id = NULL,
+                    lease_until = NULL, updated_at = ?
+                WHERE id = ? AND status = 'running' AND worker_id = ?
+                """,
+                (
+                    job_status,
+                    message,
+                    effective_retry_at,
+                    utcnow(),
+                    job_id,
+                    worker_id,
+                ),
+            )
+            return exhausted, attempt
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT desired_state FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        if row is None:
+            raise LookupError(f"job {job_id!r} does not exist")
+        return row["desired_state"] == "cancelled"
+
+    def finalize_cancel(self, job_id: str) -> bool:
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                "SELECT desired_state FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+            if job is None or job["desired_state"] != "cancelled":
+                return False
+            timestamp = utcnow()
+            connection.execute(
+                """
+                UPDATE job_steps SET status = 'cancelled', finished_at = ?
+                WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')
+                """,
+                (timestamp, job_id),
+            )
+            connection.execute(
+                """
+                UPDATE jobs
+                SET status = 'cancelled', message = '已取消', run_after = NULL,
+                    worker_id = NULL, lease_until = NULL, finished_at = ?,
+                    updated_at = ?
+                WHERE id = ? AND desired_state = 'cancelled'
+                """,
+                (timestamp, timestamp, job_id),
+            )
+            return True
+
+    def current_step_id(self, job_id: str) -> str:
+        with self.database.connection() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+            if exists is None:
+                raise LookupError(f"job {job_id!r} does not exist")
+            row = connection.execute(
+                """
+                SELECT id FROM job_steps
+                WHERE job_id = ?
+                  AND status IN ('running', 'retry_wait', 'queued', 'pending', 'failed')
+                ORDER BY
+                  CASE status WHEN 'running' THEN 0 ELSE 1 END,
+                  sequence ASC, shot_id ASC, id ASC
+                LIMIT 1
+                """,
+                (job_id,),
+            ).fetchone()
+        if row is None:
+            raise LookupError(f"job {job_id!r} has no active step")
+        return str(row["id"])
+
+    def apply_step_outcome(
+        self,
+        job_id: str,
+        outcome: Any,
+        worker_id: str,
+    ) -> None:
+        self.complete_step(
+            job_id,
+            outcome.step_id,
+            outcome.input_hash,
+            outcome.artifacts,
+            expected_worker_id=worker_id,
+        )
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                """
+                SELECT mode, desired_state FROM jobs
+                WHERE id = ? AND status = 'running' AND worker_id = ?
+                """,
+                (job_id, worker_id),
+            ).fetchone()
+            if job is None:
+                raise LeaseOwnershipError(
+                    f"worker {worker_id!r} no longer owns job {job_id!r}"
+                )
+            if job["desired_state"] == "cancelled":
+                target = "cancelled"
+                connection.execute(
+                    """
+                    UPDATE job_steps SET status = 'cancelled', finished_at = ?
+                    WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')
+                    """,
+                    (utcnow(), job_id),
+                )
+            elif job["desired_state"] == "paused":
+                target = "paused"
+            elif job["mode"] == "manual_review":
+                target = "waiting_review"
+            else:
+                target = "queued"
+            timestamp = utcnow()
+            changed = connection.execute(
+                """
+                UPDATE jobs
+                SET status = ?, progress = ?, message = ?, final_video = ?,
+                    run_after = NULL, worker_id = NULL, lease_until = NULL,
+                    finished_at = CASE WHEN ? = 'cancelled' THEN ? ELSE finished_at END,
+                    updated_at = ?
+                WHERE id = ? AND status = 'running' AND worker_id = ?
+                """,
+                (
+                    target,
+                    outcome.progress,
+                    outcome.message,
+                    outcome.final_video,
+                    target,
+                    timestamp,
+                    timestamp,
+                    job_id,
+                    worker_id,
+                ),
+            ).rowcount
+            if not changed:
+                raise LeaseOwnershipError(
+                    f"worker {worker_id!r} no longer owns job {job_id!r}"
+                )
+
+    def ensure_bootstrap_step(self, job_id: str) -> str:
+        with self.database.transaction() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+            if exists is None:
+                raise LookupError(f"job {job_id!r} does not exist")
+            rows = connection.execute(
+                """
+                SELECT id, status FROM job_steps
+                WHERE job_id = ?
+                ORDER BY sequence ASC, shot_id ASC, id ASC
+                """,
+                (job_id,),
+            ).fetchall()
+            timestamp = utcnow()
+            if not rows:
+                step_id = str(uuid4())
+                connection.execute(
+                    """
+                    INSERT INTO job_steps(
+                        id, job_id, sequence, stage_key, shot_id, status, started_at
+                    ) VALUES (?, ?, 0, 'input_parse', '', 'running', ?)
+                    """,
+                    (step_id, job_id, timestamp),
+                )
+                return step_id
+            active = next(
+                (
+                    row
+                    for row in rows
+                    if row["status"] in ("running", "retry_wait", "pending", "queued")
+                ),
+                None,
+            )
+            if active is None:
+                raise LookupError(f"job {job_id!r} has no unfinished step")
+            connection.execute(
+                """
+                UPDATE job_steps
+                SET status = 'running', started_at = COALESCE(started_at, ?)
+                WHERE id = ? AND job_id = ?
+                """,
+                (timestamp, active["id"], job_id),
+            )
+            return str(active["id"])
 
     def reconcile_checkpoints(self) -> int:
         with self.database.connection() as connection:
