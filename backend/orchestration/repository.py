@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
 
-from backend.orchestration.checkpoints import ArtifactDraft, validate_checkpoint
+from backend.orchestration.checkpoints import (
+    ArtifactDraft,
+    matches_file_identity,
+    validate_checkpoint,
+    validated_file_identities,
+)
 from backend.orchestration.schemas import JobCreate
 
 if TYPE_CHECKING:
@@ -161,7 +166,8 @@ class JobRepository:
             metadata_json.append(
                 json.dumps(draft.metadata, ensure_ascii=False, allow_nan=False)
             )
-        if not validate_checkpoint(drafts, step_input_hash, step_input_hash):
+        identities = validated_file_identities(drafts)
+        if identities is None:
             raise ValueError("artifact checkpoint is no longer valid")
 
         timestamp = utcnow()
@@ -214,18 +220,37 @@ class JobRepository:
                 """,
                 (step_input_hash, timestamp, step_id, job_id),
             )
+            if any(
+                not matches_file_identity(draft.path, identity)
+                for draft, identity in zip(drafts, identities, strict=True)
+            ):
+                raise ValueError("artifact checkpoint changed during completion")
 
     def reconcile_checkpoints(self) -> int:
         with self.database.connection() as connection:
             rows = connection.execute(
                 """
-                SELECT job_id, step_id, kind, path, sha256, size
+                SELECT id, job_id, step_id, kind, path, sha256, size,
+                       validated_at
                 FROM artifacts
                 WHERE active = 1
                 """
             ).fetchall()
+            missing_artifact_rows = connection.execute(
+                """
+                SELECT steps.job_id, steps.id AS step_id
+                FROM job_steps AS steps
+                WHERE steps.status = 'completed'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM artifacts
+                      WHERE artifacts.job_id = steps.job_id
+                        AND artifacts.step_id = steps.id
+                        AND artifacts.active = 1
+                  )
+                """
+            ).fetchall()
 
-        invalid_roots: set[tuple[str, str]] = set()
+        invalid_versions: dict[tuple[str, str], list[sqlite3.Row]] = {}
         for row in rows:
             artifact = ArtifactDraft(
                 kind=row["kind"],
@@ -234,12 +259,18 @@ class JobRepository:
                 size=row["size"],
             )
             if not validate_checkpoint([artifact], "stored", "stored"):
-                invalid_roots.add((row["job_id"], row["step_id"]))
+                root = (row["job_id"], row["step_id"])
+                invalid_versions.setdefault(root, []).append(row)
+
+        missing_artifact_roots = {
+            (row["job_id"], row["step_id"]) for row in missing_artifact_rows
+        }
 
         roots_by_job: dict[str, set[str]] = {}
-        for job_id, step_id in invalid_roots:
+        for job_id, step_id in invalid_versions.keys() | missing_artifact_roots:
             roots_by_job.setdefault(job_id, set()).add(step_id)
 
+        reconciled_root_count = 0
         for job_id, root_ids in roots_by_job.items():
             with self.database.transaction() as connection:
                 steps = connection.execute(
@@ -251,8 +282,56 @@ class JobRepository:
                     (job_id,),
                 ).fetchall()
                 by_id = {row["id"]: row for row in steps}
-                affected: set[str] = set()
+                confirmed_roots: set[str] = set()
                 for root_id in root_ids:
+                    root_key = (job_id, root_id)
+                    bad_version_remains = any(
+                        connection.execute(
+                            """
+                            SELECT 1 FROM artifacts
+                            WHERE id = ? AND job_id = ? AND step_id = ?
+                              AND kind = ? AND path = ? AND sha256 = ?
+                              AND size = ? AND validated_at = ? AND active = 1
+                            """,
+                            (
+                                version["id"],
+                                version["job_id"],
+                                version["step_id"],
+                                version["kind"],
+                                version["path"],
+                                version["sha256"],
+                                version["size"],
+                                version["validated_at"],
+                            ),
+                        ).fetchone()
+                        is not None
+                        for version in invalid_versions.get(root_key, [])
+                    )
+                    completed_still_has_no_artifact = False
+                    if root_key in missing_artifact_roots:
+                        completed_still_has_no_artifact = (
+                            connection.execute(
+                                """
+                                SELECT 1 FROM job_steps AS steps
+                                WHERE steps.job_id = ? AND steps.id = ?
+                                  AND steps.status = 'completed'
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM artifacts
+                                      WHERE artifacts.job_id = steps.job_id
+                                        AND artifacts.step_id = steps.id
+                                        AND artifacts.active = 1
+                                  )
+                                """,
+                                (job_id, root_id),
+                            ).fetchone()
+                            is not None
+                        )
+                    if bad_version_remains or completed_still_has_no_artifact:
+                        confirmed_roots.add(root_id)
+
+                reconciled_root_count += len(confirmed_roots)
+                affected: set[str] = set()
+                for root_id in confirmed_roots:
                     root = by_id.get(root_id)
                     if root is None:
                         continue
@@ -302,7 +381,7 @@ class JobRepository:
                         job_id,
                     ),
                 )
-        return len(invalid_roots)
+        return reconciled_root_count
 
     @staticmethod
     def _job_with_steps(

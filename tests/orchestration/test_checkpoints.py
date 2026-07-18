@@ -1,9 +1,12 @@
 import hashlib
 import json
+import sqlite3
 from contextlib import contextmanager
 
 import pytest
 
+from backend.orchestration import checkpoints as checkpoints_module
+from backend.orchestration import repository as repository_module
 from backend.orchestration.checkpoints import (
     ArtifactDraft,
     input_hash,
@@ -94,6 +97,28 @@ def test_checkpoint_rejects_empty_artifacts_and_missing_draft_path(tmp_path):
         ArtifactDraft.from_path("shot", tmp_path / "missing.json")
 
 
+def test_checkpoint_rejects_file_that_changes_while_hashing(tmp_path, monkeypatch):
+    output = tmp_path / "shot.json"
+    output.write_text("content", encoding="utf-8")
+    draft = ArtifactDraft.from_path("shot", output)
+    original_fstat = checkpoints_module.os.fstat
+    calls = 0
+
+    def changing_fstat(file_descriptor):
+        nonlocal calls
+        calls += 1
+        file_stat = original_fstat(file_descriptor)
+        if calls == 2:
+            values = list(file_stat)
+            values[6] += 1
+            return checkpoints_module.os.stat_result(values)
+        return file_stat
+
+    monkeypatch.setattr(checkpoints_module.os, "fstat", changing_fstat)
+
+    assert validate_checkpoint([draft], "abc", "abc") is False
+
+
 def test_input_hash_is_stable_for_key_order_and_unicode():
     first = input_hash({"镜头": "雨夜", "options": {"b": 2, "a": 1}})
     second = input_hash({"options": {"a": 1, "b": 2}, "镜头": "雨夜"})
@@ -120,10 +145,32 @@ def test_artifact_draft_copies_metadata_and_preserves_unicode(tmp_path):
     other = ArtifactDraft.from_path("shot", output)
     metadata["说明"] = "已修改"
     metadata["nested"]["take"] = 2
-    other.metadata["isolated"] = True
 
     assert draft.metadata == {"说明": "第一镜", "nested": {"take": 1}}
-    assert "isolated" not in ArtifactDraft.from_path("shot", output).metadata
+    fresh = ArtifactDraft.from_path("shot", output)
+    assert other.metadata == fresh.metadata == {}
+    assert other.metadata is not fresh.metadata
+
+
+def test_artifact_draft_metadata_is_recursively_immutable_and_json_safe(tmp_path):
+    output = tmp_path / "shot.json"
+    output.write_text("content", encoding="utf-8")
+    draft = ArtifactDraft.from_path(
+        "shot", output, {"说明": "第一镜", "nested": {"takes": [1, 2]}}
+    )
+
+    with pytest.raises(TypeError):
+        draft.metadata["说明"] = "changed"
+    with pytest.raises(TypeError):
+        draft.metadata["nested"]["takes"] = []
+    with pytest.raises(TypeError):
+        draft.metadata["nested"]["takes"][0] = 9
+
+    encoded = json.dumps(draft.metadata, ensure_ascii=False)
+    assert json.loads(encoded) == {
+        "说明": "第一镜",
+        "nested": {"takes": [1, 2]},
+    }
 
 
 def test_complete_step_atomically_persists_artifact_and_completion(
@@ -173,6 +220,32 @@ def test_complete_step_rejects_stale_artifact_without_partial_write(
     assert count == 0
 
 
+def test_complete_step_rolls_back_when_file_changes_after_validation(
+    repository_and_job, tmp_path, monkeypatch
+):
+    database, repository, job = repository_and_job
+    _insert_step(database, job["id"], "step-1", 4, "shot-1")
+    output = tmp_path / "shot.json"
+    output.write_bytes(b"original")
+    draft = ArtifactDraft.from_path("image", output)
+    original_transaction = database.transaction
+
+    @contextmanager
+    def transaction_with_late_file_change():
+        with original_transaction() as connection:
+            output.write_bytes(b"modified")
+            yield connection
+
+    monkeypatch.setattr(database, "transaction", transaction_with_late_file_change)
+
+    with pytest.raises(ValueError, match="artifact checkpoint"):
+        repository.complete_step(job["id"], "step-1", "input-abc", [draft])
+
+    step = _row(database, "SELECT * FROM job_steps WHERE id = 'step-1'")
+    assert step["status"] == "running"
+    assert _row(database, "SELECT COUNT(*) AS count FROM artifacts")["count"] == 0
+
+
 def test_complete_step_rejects_empty_inputs_unknown_steps_and_duplicates(
     repository_and_job, tmp_path
 ):
@@ -200,6 +273,32 @@ def test_complete_step_rejects_empty_inputs_unknown_steps_and_duplicates(
     ] == "running"
 
 
+def test_complete_step_rejects_non_json_metadata_before_transaction(
+    repository_and_job, tmp_path, monkeypatch
+):
+    database, repository, job = repository_and_job
+    _insert_step(database, job["id"], "step-1", 4, "shot-1")
+    output = tmp_path / "shot.json"
+    output.write_text("render", encoding="utf-8")
+    draft = ArtifactDraft.from_path("image", output, {"bad": object()})
+    original_transaction = database.transaction
+    entered = 0
+
+    @contextmanager
+    def counted_transaction():
+        nonlocal entered
+        entered += 1
+        with original_transaction() as connection:
+            yield connection
+
+    monkeypatch.setattr(database, "transaction", counted_transaction)
+
+    with pytest.raises(TypeError):
+        repository.complete_step(job["id"], "step-1", "input-abc", [draft])
+
+    assert entered == 0
+
+
 def test_recompletion_deactivates_old_artifact_set(repository_and_job, tmp_path):
     database, repository, job = repository_and_job
     _insert_step(database, job["id"], "step-1", 4, "shot-1")
@@ -223,6 +322,56 @@ def test_recompletion_deactivates_old_artifact_set(repository_and_job, tmp_path)
         str(new_path.resolve()): 1,
         str(old_path.resolve()): 0,
     }
+
+
+def test_recompletion_rolls_back_all_changes_when_step_update_aborts(
+    repository_and_job, tmp_path
+):
+    database, repository, job = repository_and_job
+    _insert_step(database, job["id"], "step-1", 4, "shot-1")
+    old_path = tmp_path / "old.png"
+    new_path = tmp_path / "new.png"
+    old_path.write_bytes(b"old")
+    new_path.write_bytes(b"new")
+    repository.complete_step(
+        job["id"],
+        "step-1",
+        "old-input",
+        [ArtifactDraft.from_path("image", old_path)],
+    )
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER abort_step_completion
+            BEFORE UPDATE OF status ON job_steps
+            WHEN NEW.id = 'step-1' AND NEW.status = 'completed'
+            BEGIN
+                SELECT RAISE(ABORT, 'blocked completion');
+            END
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="blocked completion"):
+        repository.complete_step(
+            job["id"],
+            "step-1",
+            "new-input",
+            [ArtifactDraft.from_path("image", new_path)],
+        )
+
+    step = _row(database, "SELECT * FROM job_steps WHERE id='step-1'")
+    with database.connection() as connection:
+        artifacts = connection.execute(
+            "SELECT path, active FROM artifacts ORDER BY path"
+        ).fetchall()
+    assert step["status"] == "completed"
+    assert step["input_hash"] == "old-input"
+    assert [(row["path"], row["active"]) for row in artifacts] == [
+        (str(old_path.resolve()), 1)
+    ]
+
+    with database.transaction() as connection:
+        connection.execute("DROP TRIGGER abort_step_completion")
 
 
 def test_reconcile_bad_shot_preserves_other_shot_and_resets_job(
@@ -305,6 +454,83 @@ def test_reconcile_reads_artifacts_through_managed_connection(
 
     assert repository.reconcile_checkpoints() == 0
     assert managed == {"entered": 1, "exited": 1}
+
+
+def test_reconcile_skips_bad_artifact_repaired_after_scan(
+    repository_and_job, tmp_path, monkeypatch
+):
+    database, repository, job = repository_and_job
+    _insert_step(database, job["id"], "shot-root", 2, "shot-1")
+    output = tmp_path / "shot.dat"
+    output.write_bytes(b"broken00")
+    repository.complete_step(
+        job["id"],
+        "shot-root",
+        "input-hash",
+        [ArtifactDraft.from_path("image", output)],
+    )
+    output.unlink()
+    original_validate = repository_module.validate_checkpoint
+    repaired = {}
+
+    def validate_then_repair(artifacts, expected_hash, actual_hash):
+        result = original_validate(artifacts, expected_hash, actual_hash)
+        if not repaired:
+            output.write_bytes(b"repaired")
+            draft = ArtifactDraft.from_path("image", output)
+            with database.transaction() as connection:
+                connection.execute(
+                    """
+                    UPDATE artifacts
+                    SET sha256=?, size=?, validated_at=?
+                    WHERE job_id=? AND step_id=? AND active=1
+                    """,
+                    (
+                        draft.sha256,
+                        draft.size,
+                        "2026-07-19T12:00:00+00:00",
+                        job["id"],
+                        "shot-root",
+                    ),
+                )
+            repaired["sha256"] = draft.sha256
+        return result
+
+    monkeypatch.setattr(repository_module, "validate_checkpoint", validate_then_repair)
+
+    assert repository.reconcile_checkpoints() == 0
+
+    step = _row(database, "SELECT * FROM job_steps WHERE id='shot-root'")
+    artifact = _row(database, "SELECT * FROM artifacts WHERE step_id='shot-root'")
+    assert step["status"] == "completed"
+    assert artifact["active"] == 1
+    assert artifact["sha256"] == repaired["sha256"]
+
+
+def test_reconcile_completed_step_without_active_artifact(
+    repository_and_job, tmp_path
+):
+    database, repository, job = repository_and_job
+    _insert_step(database, job["id"], "shot-root", 2, "shot-1")
+    _insert_step(database, job["id"], "compose", 10, "")
+    output = tmp_path / "shot.dat"
+    output.write_bytes(b"rendered")
+    repository.complete_step(
+        job["id"],
+        "shot-root",
+        "input-hash",
+        [ArtifactDraft.from_path("image", output)],
+    )
+    with database.transaction() as connection:
+        connection.execute(
+            "UPDATE artifacts SET active=0 WHERE step_id='shot-root'"
+        )
+
+    assert repository.reconcile_checkpoints() == 1
+
+    root = _row(database, "SELECT * FROM job_steps WHERE id='shot-root'")
+    downstream = _row(database, "SELECT * FROM job_steps WHERE id='compose'")
+    assert root["status"] == downstream["status"] == "queued"
 
 
 def test_reconcile_counts_invalid_steps_once_and_merges_roots_per_job(
