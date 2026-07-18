@@ -163,3 +163,53 @@ def test_migration_version_is_recorded_once_across_reopens(tmp_path):
 
     assert [row["version"] for row in versions] == [1]
     assert foreign_keys == 1
+
+
+def test_event_cursor_index_uses_job_id_then_event_id(tmp_path):
+    database = OrchestrationDatabase(tmp_path / "orchestration.db")
+
+    with database.connection() as connection:
+        columns = connection.execute(
+            "PRAGMA index_info('idx_events_job_id')"
+        ).fetchall()
+
+    assert [row["name"] for row in columns] == ["job_id", "id"]
+
+
+def test_reopen_replaces_legacy_event_index_without_new_migration_version(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    database = OrchestrationDatabase(database_path)
+    with database.transaction() as connection:
+        connection.execute("DROP INDEX idx_events_job_id")
+        connection.execute(
+            "CREATE INDEX idx_events_job_id ON job_events(job_id)"
+        )
+
+    reopened = OrchestrationDatabase(database_path)
+    with reopened.connection() as connection:
+        columns = connection.execute(
+            "PRAGMA index_info('idx_events_job_id')"
+        ).fetchall()
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+
+    assert [row["name"] for row in columns] == ["job_id", "id"]
+    assert [row["version"] for row in versions] == [1]
+
+
+def test_reopen_does_not_rebuild_correct_event_index(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    database = OrchestrationDatabase(database_path)
+    with database.connection() as connection:
+        schema_version_before = connection.execute(
+            "PRAGMA schema_version"
+        ).fetchone()[0]
+
+    reopened = OrchestrationDatabase(database_path)
+    with reopened.connection() as connection:
+        schema_version_after = connection.execute(
+            "PRAGMA schema_version"
+        ).fetchone()[0]
+
+    assert schema_version_after == schema_version_before

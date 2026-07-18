@@ -80,4 +80,4 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status_created
 CREATE INDEX IF NOT EXISTS idx_steps_job_sequence
     ON job_steps(job_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_events_job_id
-    ON job_events(job_id);
+    ON job_events(job_id, id);

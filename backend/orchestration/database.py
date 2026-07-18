@@ -52,6 +52,17 @@ class OrchestrationDatabase:
         connection = self.connect()
         try:
             connection.executescript(f"BEGIN IMMEDIATE;\n{schema}")
+            event_index_columns = [
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA index_info('idx_events_job_id')"
+                )
+            ]
+            if event_index_columns != ["job_id", "id"]:
+                connection.execute("DROP INDEX IF EXISTS idx_events_job_id")
+                connection.execute(
+                    "CREATE INDEX idx_events_job_id ON job_events(job_id, id)"
+                )
             connection.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
