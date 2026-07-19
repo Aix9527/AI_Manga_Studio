@@ -38,7 +38,7 @@ def _create_legacy_v1_database(database_path):
         connection.close()
 
 
-def _insert_job(connection, job_id):
+def _insert_job(connection, job_id, *, settings_json="{}"):
     connection.execute(
         """
         INSERT INTO jobs(
@@ -53,7 +53,7 @@ def _insert_job(connection, job_id):
             "novel",
             "automatic",
             "queued",
-            "{}",
+            settings_json,
             f"key-{job_id}-0000",
             "2026-01-01T00:00:00+00:00",
             "2026-01-01T00:00:00+00:00",
@@ -132,6 +132,16 @@ def _write_minimal_base_migration(migrations_dir, filename="001_base.sql"):
     )
 
 
+def _copy_migrations_through(migrations_dir, version):
+    migrations_dir.mkdir()
+    for source in MIGRATIONS_DIR.glob("*.sql"):
+        if int(source.name.partition("_")[0]) <= version:
+            (migrations_dir / source.name).write_text(
+                source.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+
 def _request(*, project_id="p1", idempotency_key="job-key-0001"):
     return JobCreate(
         project_id=project_id,
@@ -159,6 +169,27 @@ def test_created_job_survives_repository_reconstruction(tmp_path):
     assert loaded["settings"] == _request().model_dump(mode="json")
     assert loaded["steps"] == []
     assert "settings_json" not in loaded
+    assert "create_request_json" not in loaded
+
+
+def test_new_job_stores_canonical_immutable_create_request(tmp_path):
+    repository = JobRepository(OrchestrationDatabase(tmp_path / "orchestration.db"))
+    request = _request()
+
+    created = repository.create_job(request)
+
+    with repository.database.connection() as connection:
+        stored = connection.execute(
+            "SELECT create_request_json FROM jobs WHERE id=?",
+            (created["id"],),
+        ).fetchone()["create_request_json"]
+    assert stored == json.dumps(
+        request.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
 
 
 def test_repeated_idempotency_key_returns_one_job_and_one_created_event(tmp_path):
@@ -246,6 +277,7 @@ def test_current_job_excludes_terminal_jobs_and_list_jobs_paginates(tmp_path):
     page = repository.list_jobs(limit=1, offset=1)
     assert [job["id"] for job in page] == [completed["id"]]
     assert "settings_json" not in page[0]
+    assert "create_request_json" not in page[0]
 
 
 def test_concurrent_idempotent_creates_make_one_job_and_created_event(tmp_path):
@@ -283,7 +315,7 @@ def test_migration_version_is_recorded_once_across_reopens(tmp_path):
     with second.connection() as connection:
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
 
-    assert [row["version"] for row in versions] == [1, 2, 3]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4]
     assert foreign_keys == 1
 
 
@@ -303,7 +335,7 @@ def test_v3_adds_durable_command_idempotency_registry(tmp_path):
             "PRAGMA index_list('job_commands')"
         ).fetchall()
 
-    assert [row["version"] for row in versions] == [1, 2, 3]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4]
     assert [row["name"] for row in columns] == [
         "idempotency_key",
         "job_id",
@@ -312,6 +344,58 @@ def test_v3_adds_durable_command_idempotency_registry(tmp_path):
         "created_at",
     ]
     assert any(row["origin"] == "pk" and row["unique"] for row in indexes)
+
+
+def test_v4_backfills_immutable_create_request_from_v3_settings(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    v3_migrations = tmp_path / "v3-migrations"
+    _copy_migrations_through(v3_migrations, 3)
+    legacy = OrchestrationDatabase(database_path, v3_migrations)
+    settings = _request(
+        idempotency_key="key-historic-job-0000"
+    ).model_dump(mode="json")
+    historic_settings_json = json.dumps(
+        settings,
+        ensure_ascii=False,
+        indent=2,
+    )
+    with legacy.transaction() as connection:
+        _insert_job(
+            connection,
+            "historic-job",
+            settings_json=historic_settings_json,
+        )
+
+    upgraded = OrchestrationDatabase(database_path)
+    OrchestrationDatabase(database_path)
+    with upgraded.connection() as connection:
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        job_columns = connection.execute("PRAGMA table_info('jobs')").fetchall()
+        has_create_request = any(
+            row["name"] == "create_request_json" for row in job_columns
+        )
+        job = (
+            connection.execute(
+                "SELECT settings_json, create_request_json FROM jobs WHERE id=?",
+                ("historic-job",),
+            ).fetchone()
+            if has_create_request
+            else None
+        )
+
+    assert [row["version"] for row in versions] == [1, 2, 3, 4]
+    create_request_column = next(
+        row for row in job_columns if row["name"] == "create_request_json"
+    )
+    assert create_request_column["type"] == "TEXT"
+    assert create_request_column["notnull"] == 1
+    assert job["settings_json"] == historic_settings_json
+    assert job["create_request_json"] == historic_settings_json
+    assert json.loads(job["create_request_json"]) == settings
+    replayed = JobRepository(upgraded).create_job(JobCreate.model_validate(settings))
+    assert replayed["id"] == "historic-job"
 
 
 def test_event_cursor_index_uses_job_id_then_event_id(tmp_path):
@@ -339,7 +423,7 @@ def test_v2_replaces_legacy_event_index(tmp_path):
         ).fetchall()
 
     assert [row["name"] for row in columns] == ["job_id", "id"]
-    assert [row["version"] for row in versions] == [1, 2, 3]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4]
 
 
 def test_reopen_does_not_rebuild_correct_event_index(tmp_path):
@@ -412,7 +496,7 @@ def test_v2_upgrades_legacy_artifacts_and_preserves_validated_rows(tmp_path):
                 (row["seq"], row["from"], row["to"], row["on_delete"])
             )
 
-    assert [row["version"] for row in versions] == [1, 2, 3]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4]
     assert validated_at["type"] == "TEXT"
     assert validated_at["notnull"] == 1
     assert artifact["validated_at"] == "2026-01-01T00:00:00+00:00"

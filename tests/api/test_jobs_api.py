@@ -103,6 +103,73 @@ def test_concurrent_creates_with_same_key_and_different_payload_have_one_winner(
     assert events(repository, jobs[0]["id"]) == ["job.created"]
 
 
+def test_create_idempotency_uses_request_before_review_edits_after_restart(
+    app_factory, valid_job_payload
+):
+    original = {**valid_job_payload, "mode": "manual_review"}
+    first = app_factory()
+    created = create(first, original)
+    repository = first.app.state.job_service.repository
+    reviewed = insert_step(repository, created["id"], 0, "completed")
+    set_job(repository, created["id"], status="waiting_review")
+    with repository.database.connection() as connection:
+        immutable_before = connection.execute(
+            "SELECT create_request_json FROM jobs WHERE id=?",
+            (created["id"],),
+        ).fetchone()["create_request_json"]
+
+    edited = first.post(
+        f"/api/jobs/{created['id']}/steps/{reviewed}/review",
+        json={
+            "action": "edit",
+            "patch": {
+                "shot_duration": 8,
+                "options": {"style": "watercolor"},
+            },
+        },
+    )
+    assert edited.status_code == 200
+    with repository.database.connection() as connection:
+        stored_after_edit = connection.execute(
+            "SELECT settings_json, create_request_json FROM jobs WHERE id=?",
+            (created["id"],),
+        ).fetchone()
+    assert stored_after_edit["create_request_json"] == immutable_before
+    assert json.loads(stored_after_edit["settings_json"])["shot_duration"] == 8
+    edited_request = {
+        **original,
+        "shot_duration": 8,
+        "options": {"language": "zh-CN", "style": "watercolor"},
+    }
+    before_job = repository.get_job(created["id"])
+    before_events = repository.list_events(created["id"])
+    with repository.database.connection() as connection:
+        before_counts = {
+            table: connection.execute(
+                f"SELECT count(*) AS n FROM {table}"
+            ).fetchone()["n"]
+            for table in ("jobs", "job_steps", "job_events")
+        }
+
+    restarted = app_factory()
+    original_replay = restarted.post("/api/jobs", json=original)
+    edited_replay = restarted.post("/api/jobs", json=edited_request)
+
+    assert original_replay.status_code == 200
+    assert original_replay.json()["id"] == created["id"]
+    assert "create_request_json" not in original_replay.json()
+    assert edited_replay.status_code == 409
+    assert repository.get_job(created["id"]) == before_job
+    assert repository.list_events(created["id"]) == before_events
+    with repository.database.connection() as connection:
+        assert {
+            table: connection.execute(
+                f"SELECT count(*) AS n FROM {table}"
+            ).fetchone()["n"]
+            for table in ("jobs", "job_steps", "job_events")
+        } == before_counts
+
+
 def test_get_list_and_query_validation(client, valid_job_payload):
     created = create(client, valid_job_payload)
 

@@ -59,7 +59,7 @@ class JobRepository:
                 (request.idempotency_key,),
             ).fetchone()
             if existing is not None:
-                persisted = json.loads(existing["settings_json"])
+                persisted = json.loads(existing["create_request_json"])
                 incoming = request.model_dump(mode="json")
                 if self._canonical_json(persisted) != self._canonical_json(incoming):
                     raise JobConflictError(
@@ -73,8 +73,9 @@ class JobRepository:
                 """
                 INSERT INTO jobs(
                     id, project_id, input_path, input_type, mode, status,
-                    settings_json, idempotency_key, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    settings_json, create_request_json, idempotency_key,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
@@ -84,6 +85,7 @@ class JobRepository:
                     request.mode,
                     "queued",
                     request.model_dump_json(),
+                    self._canonical_json(request.model_dump(mode="json")),
                     request.idempotency_key,
                     timestamp,
                     timestamp,
@@ -135,6 +137,7 @@ class JobRepository:
         jobs = [rowdict(row) for row in rows]
         for job in jobs:
             job.pop("settings_json", None)
+            job.pop("create_request_json", None)
         return jobs
 
     def append_event(
@@ -1440,6 +1443,7 @@ class JobRepository:
     ) -> dict[str, Any]:
         job = rowdict(job_row)
         job["settings"] = json.loads(job.pop("settings_json"))
+        job.pop("create_request_json", None)
         step_rows = connection.execute(
             """
             SELECT * FROM job_steps
