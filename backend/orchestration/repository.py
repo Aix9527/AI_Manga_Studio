@@ -264,7 +264,7 @@ class JobRepository:
             ).fetchone()
             if job is None:
                 raise JobNotFoundError(f"job {job_id!r} does not exist")
-            if job["status"] not in {"failed", "paused", "retry_wait"}:
+            if job["status"] != "failed":
                 raise JobConflictError("job is not in a retryable state")
             if step_id is None:
                 step = connection.execute(
@@ -371,11 +371,13 @@ class JobRepository:
             if job["status"] != "waiting_review":
                 raise JobConflictError("job is not waiting for review")
             step = connection.execute(
-                "SELECT id FROM job_steps WHERE id=? AND job_id=?",
+                "SELECT id, status FROM job_steps WHERE id=? AND job_id=?",
                 (step_id, job_id),
             ).fetchone()
             if step is None:
                 raise JobConflictError("review step does not belong to job")
+            if step["status"] not in {"completed", "waiting_review"}:
+                raise JobConflictError("step is not reviewable")
 
             if action == "edit":
                 allowed = {"shot_duration", "width", "height", "fps", "options"}

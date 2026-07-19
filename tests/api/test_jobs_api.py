@@ -158,6 +158,56 @@ def test_retry_rejects_failed_step_while_job_is_worker_owned(
     assert events(repository, job["id"]) == before_events
 
 
+@pytest.mark.parametrize("job_status", ["paused", "retry_wait"])
+def test_retry_rejects_failed_step_unless_job_itself_failed_without_writes(
+    client, valid_job_payload, job_status
+):
+    job = create(client, valid_job_payload)
+    repository = client.app.state.job_service.repository
+    failed = insert_step(
+        repository,
+        job["id"],
+        0,
+        "failed",
+        progress=.5,
+        input_hash="keep",
+        error_code="E",
+        error_message="keep",
+        started_at="start",
+        finished_at="finish",
+    )
+    insert_artifact(repository, job["id"], failed)
+    set_job(repository, job["id"], status=job_status, desired_state="paused")
+    before_job = repository.get_job(job["id"])
+    with repository.database.connection() as connection:
+        before_artifacts = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM artifacts WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ]
+        before_event_count = connection.execute(
+            "SELECT count(*) AS n FROM job_events WHERE job_id=?", (job["id"],)
+        ).fetchone()["n"]
+
+    response = client.post(
+        f"/api/jobs/{job['id']}/retry", json={"step_id": failed}
+    )
+
+    assert response.status_code == 409
+    assert repository.get_job(job["id"]) == before_job
+    with repository.database.connection() as connection:
+        assert [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM artifacts WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ] == before_artifacts
+        assert connection.execute(
+            "SELECT count(*) AS n FROM job_events WHERE job_id=?", (job["id"],)
+        ).fetchone()["n"] == before_event_count
+
+
 def test_pause_and_resume_follow_desired_state_semantics(client, valid_job_payload):
     job = create(client, valid_job_payload)
     repository = client.app.state.job_service.repository
@@ -322,7 +372,7 @@ def test_manual_review_approve_edit_retry_and_failures_are_transactional(
 ):
     job = create(client, valid_job_payload, mode="manual_review")
     repository = client.app.state.job_service.repository
-    reviewed = insert_step(repository, job["id"], 1, "waiting_review", shot_id="shot-a")
+    reviewed = insert_step(repository, job["id"], 1, "completed", shot_id="shot-a")
     downstream = insert_step(repository, job["id"], 2, "completed", shot_id="shot-a", input_hash="old")
     set_job(repository, job["id"], status="waiting_review")
 
@@ -347,6 +397,10 @@ def test_manual_review_approve_edit_retry_and_failures_are_transactional(
     assert edited.json()["settings"]["options"] == {"language": "zh-CN", "style": "水墨"}
 
     set_job(repository, job["id"], status="waiting_review")
+    with repository.database.transaction() as connection:
+        connection.execute(
+            "UPDATE job_steps SET status='completed' WHERE id=?", (reviewed,)
+        )
     before = repository.get_job(job["id"])["settings"]
     with repository.database.connection() as connection:
         action_count = connection.execute("SELECT count(*) AS n FROM review_actions").fetchone()["n"]
@@ -360,6 +414,11 @@ def test_manual_review_approve_edit_retry_and_failures_are_transactional(
         assert connection.execute("SELECT count(*) AS n FROM review_actions").fetchone()["n"] == action_count
 
     set_job(repository, job["id"], status="waiting_review")
+    with repository.database.transaction() as connection:
+        connection.execute(
+            "UPDATE job_steps SET status='completed' WHERE id IN (?, ?)",
+            (reviewed, downstream),
+        )
     retried = client.post(
         f"/api/jobs/{job['id']}/steps/{reviewed}/review",
         json={"action": "retry", "comment": "重做"},
@@ -382,6 +441,71 @@ def test_manual_review_approve_edit_retry_and_failures_are_transactional(
     assert events(repository, job["id"])[-3:] == [
         "job.review.approve", "job.review.edit", "job.review.retry"
     ]
+
+
+@pytest.mark.parametrize("step_status", ["queued", "failed"])
+def test_review_rejects_non_reviewable_step_without_writes(
+    client, valid_job_payload, step_status
+):
+    job = create(client, valid_job_payload, mode="manual_review")
+    repository = client.app.state.job_service.repository
+    step = insert_step(
+        repository,
+        job["id"],
+        0,
+        step_status,
+        input_hash="keep",
+        error_code="keep",
+    )
+    insert_artifact(repository, job["id"], step)
+    set_job(repository, job["id"], status="waiting_review")
+    before_job = repository.get_job(job["id"])
+    with repository.database.connection() as connection:
+        before_artifacts = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM artifacts WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ]
+        before_reviews = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM review_actions WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ]
+        before_events = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM job_events WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ]
+
+    response = client.post(
+        f"/api/jobs/{job['id']}/steps/{step}/review",
+        json={"action": "edit", "patch": {"shot_duration": 8}},
+    )
+
+    assert response.status_code == 409
+    assert repository.get_job(job["id"]) == before_job
+    with repository.database.connection() as connection:
+        assert [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM artifacts WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ] == before_artifacts
+        assert [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM review_actions WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ] == before_reviews
+        assert [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM job_events WHERE job_id=? ORDER BY id", (job["id"],)
+            )
+        ] == before_events
 
 
 def _parse_sse(frame):
