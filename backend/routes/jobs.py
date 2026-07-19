@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -61,23 +62,58 @@ def get_job(job_id: str, request: Request):
 
 
 @router.post("/{job_id}/pause")
-def pause_job(job_id: str, request: Request):
-    return _command(lambda: _service(request).pause(job_id))
+def pause_job(
+    job_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=8, max_length=128
+    ),
+):
+    return _command(
+        lambda: _service(request).pause(job_id, idempotency_key)
+    )
 
 
 @router.post("/{job_id}/resume")
-def resume_job(job_id: str, request: Request):
-    return _command(lambda: _service(request).resume(job_id))
+def resume_job(
+    job_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=8, max_length=128
+    ),
+):
+    return _command(
+        lambda: _service(request).resume(job_id, idempotency_key)
+    )
 
 
 @router.post("/{job_id}/retry")
-def retry_job(job_id: str, action: JobAction, request: Request):
-    return _command(lambda: _service(request).retry(job_id, action.step_id))
+def retry_job(
+    job_id: str,
+    action: JobAction,
+    request: Request,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=8, max_length=128
+    ),
+):
+    return _command(
+        lambda: _service(request).retry(
+            job_id, action.step_id, idempotency_key
+        )
+    )
 
 
 @router.post("/{job_id}/cancel")
-def cancel_job(job_id: str, request: Request):
-    return _command(lambda: _service(request).cancel(job_id))
+def cancel_job(
+    job_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=8, max_length=128
+    ),
+):
+    return _command(
+        lambda: _service(request).cancel(job_id, idempotency_key)
+    )
 
 
 @router.get("/{job_id}/rollback-preview")
@@ -88,10 +124,20 @@ def rollback_preview(job_id: str, step_id: str, request: Request):
 
 
 @router.post("/{job_id}/rollback")
-def rollback_job(job_id: str, action: RollbackAction, request: Request):
+def rollback_job(
+    job_id: str,
+    action: RollbackAction,
+    request: Request,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=8, max_length=128
+    ),
+):
     return _command(
         lambda: _service(request).rollback(
-            job_id, action.step_id, action.confirm_invalidated_step_ids
+            job_id,
+            action.step_id,
+            action.confirm_invalidated_step_ids,
+            idempotency_key,
         )
     )
 
@@ -102,40 +148,54 @@ def review_step(
     step_id: str,
     action: ReviewAction,
     request: Request,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=8, max_length=128
+    ),
 ):
     return _command(
         lambda: _service(request).review(
-            job_id, step_id, action.action, action.comment, action.patch
+            job_id,
+            step_id,
+            action.action,
+            action.comment,
+            action.patch,
+            idempotency_key,
         )
     )
 
 
-async def event_stream(
+def event_stream(
     job_service,
     job_id: str,
     is_disconnected: Callable[[], Awaitable[bool]],
     last_event_id: str = "",
     poll_seconds: float = 1.0,
 ) -> AsyncIterator[str]:
-    previous_id = last_event_id
-    while not await is_disconnected():
-        job = job_service.get(job_id)
-        if job is None:
-            yield "event: gone\ndata: {}\n\n"
-            return
-        payload = json.dumps(
-            job,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        snapshot_id = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-        if snapshot_id != previous_id:
-            previous_id = snapshot_id
-            yield f"id: {snapshot_id}\nevent: job\ndata: {payload}\n\n"
-        else:
-            yield ": keepalive\n\n"
-        await asyncio.sleep(poll_seconds)
+    if not math.isfinite(poll_seconds) or poll_seconds <= 0:
+        raise ValueError("poll_seconds must be finite and positive")
+
+    async def events() -> AsyncIterator[str]:
+        previous_id = last_event_id
+        while not await is_disconnected():
+            job = job_service.get(job_id)
+            if job is None:
+                yield "event: gone\ndata: {}\n\n"
+                return
+            payload = json.dumps(
+                job,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            snapshot_id = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+            if snapshot_id != previous_id:
+                previous_id = snapshot_id
+                yield f"id: {snapshot_id}\nevent: job\ndata: {payload}\n\n"
+            else:
+                yield ": keepalive\n\n"
+            await asyncio.sleep(poll_seconds)
+
+    return events()
 
 
 @router.get("/{job_id}/events")

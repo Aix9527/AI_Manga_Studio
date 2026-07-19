@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any, Literal
 from unicodedata import category
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.orchestration.enums import JobStatus, StepStatus
 
@@ -14,7 +15,41 @@ JobMode = Literal["automatic", "manual_review"]
 _WINDOWS_DEVICE_DIGIT_TRANSLATION = str.maketrans("¹²³", "123")
 
 
-class JobCreate(BaseModel):
+def _replace_non_finite_json(value: Any) -> bool:
+    invalid = False
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(item, float) and not math.isfinite(item):
+                value[key] = None
+                invalid = True
+            else:
+                invalid = _replace_non_finite_json(item) or invalid
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            if isinstance(item, float) and not math.isfinite(item):
+                value[index] = None
+                invalid = True
+            else:
+                invalid = _replace_non_finite_json(item) or invalid
+    return invalid
+
+
+def _require_finite_json(value: Any) -> Any:
+    # FastAPI includes rejected input in its 422 body. Replace invalid numbers
+    # before raising so that the validation response remains valid JSON.
+    if _replace_non_finite_json(value):
+        raise ValueError("JSON numbers must be finite")
+    return value
+
+
+class FiniteJsonRequest(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def require_finite_json(cls, value: Any) -> Any:
+        return _require_finite_json(value)
+
+
+class JobCreate(FiniteJsonRequest):
     project_id: str = Field(min_length=1, max_length=128)
     input_path: str = Field(min_length=1)
     input_type: InputType
@@ -103,17 +138,17 @@ class JobView(BaseModel):
     steps: list[JobStepView] = Field(default_factory=list)
 
 
-class JobAction(BaseModel):
+class JobAction(FiniteJsonRequest):
     step_id: str | None = None
     comment: str = ""
 
 
-class RollbackAction(BaseModel):
+class RollbackAction(FiniteJsonRequest):
     step_id: str
     confirm_invalidated_step_ids: list[str]
 
 
-class ReviewAction(BaseModel):
+class ReviewAction(FiniteJsonRequest):
     action: Literal["approve", "edit", "retry", "rollback"]
     comment: str = ""
     patch: dict[str, Any] = Field(default_factory=dict)

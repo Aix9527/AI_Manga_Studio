@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -287,8 +289,8 @@ def test_cancel_is_durable_idempotent_and_runner_failure_is_best_effort(
     assert steps[completed]["status"] == "completed"
     assert steps[unfinished]["status"] == "cancelled"
     assert steps[unfinished]["finished_at"] is not None
-    assert runner.calls == 2
-    assert events(repository, job["id"])[-2:] == ["job.cancel", "job.cancel"]
+    assert runner.calls == 1
+    assert events(repository, job["id"]).count("job.cancel") == 1
 
 
 def test_rollback_scope_exact_confirmation_and_atomic_reset(client, valid_job_payload):
@@ -351,6 +353,16 @@ def test_rollback_scope_exact_confirmation_and_atomic_reset(client, valid_job_pa
         )
     assert events(repository, job["id"])[-1] == "job.rollback"
 
+    after_success = repository.get_job(job["id"])
+    after_events = events(repository, job["id"])
+    repeated = client.post(
+        f"/api/jobs/{job['id']}/rollback",
+        json={"step_id": root, "confirm_invalidated_step_ids": exact},
+    )
+    assert repeated.status_code == 409
+    assert repository.get_job(job["id"]) == after_success
+    assert events(repository, job["id"]) == after_events
+
 
 def test_global_rollback_root_includes_every_downstream_step(client, valid_job_payload):
     job = create(client, valid_job_payload)
@@ -373,7 +385,9 @@ def test_manual_review_approve_edit_retry_and_failures_are_transactional(
     job = create(client, valid_job_payload, mode="manual_review")
     repository = client.app.state.job_service.repository
     reviewed = insert_step(repository, job["id"], 1, "completed", shot_id="shot-a")
-    downstream = insert_step(repository, job["id"], 2, "completed", shot_id="shot-a", input_hash="old")
+    downstream = insert_step(
+        repository, job["id"], 2, "queued", shot_id="shot-a", input_hash="old"
+    )
     set_job(repository, job["id"], status="waiting_review")
 
     approved = client.post(
@@ -523,7 +537,7 @@ def test_sse_snapshot_uses_stable_hash_and_last_event_id(client, valid_job_paylo
 
     async def scenario():
         never_disconnect = lambda: asyncio.sleep(0, result=False)
-        stream = event_stream(service, job["id"], never_disconnect, poll_seconds=0)
+        stream = event_stream(service, job["id"], never_disconnect, poll_seconds=.001)
         first = _parse_sse(await anext(stream))
         await stream.aclose()
         canonical = json.dumps(
@@ -536,7 +550,7 @@ def test_sse_snapshot_uses_stable_hash_and_last_event_id(client, valid_job_paylo
 
         reconnected = event_stream(
             service, job["id"], never_disconnect,
-            last_event_id=first["id"], poll_seconds=0,
+            last_event_id=first["id"], poll_seconds=.001,
         )
         assert (await anext(reconnected)).startswith(": keepalive")
         service.pause(job["id"])
@@ -554,7 +568,7 @@ def test_sse_gone_ends_and_route_sets_streaming_headers(client):
             client.app.state.job_service,
             "missing",
             lambda: asyncio.sleep(0, result=False),
-            poll_seconds=0,
+            poll_seconds=.001,
         )
         frame = await anext(stream)
         assert _parse_sse(frame)["event"] == "gone"
@@ -567,3 +581,412 @@ def test_sse_gone_ends_and_route_sets_streaming_headers(client):
     assert response.headers["content-type"].startswith("text/event-stream")
     assert response.headers["cache-control"] == "no-cache"
     assert response.headers["x-accel-buffering"] == "no"
+
+
+def _command_fixture(client, valid_job_payload, action):
+    job = create(client, valid_job_payload)
+    repository = client.app.state.job_service.repository
+    if action == "pause":
+        return job, f"/api/jobs/{job['id']}/pause", None, "job.pause"
+    if action == "resume":
+        set_job(repository, job["id"], status="paused", desired_state="paused")
+        return job, f"/api/jobs/{job['id']}/resume", None, "job.resume"
+    if action == "retry":
+        step = insert_step(repository, job["id"], 0, "failed")
+        set_job(repository, job["id"], status="failed")
+        return (
+            job,
+            f"/api/jobs/{job['id']}/retry",
+            {"step_id": step},
+            "job.retry",
+        )
+    if action == "rollback":
+        root = insert_step(repository, job["id"], 0, "completed")
+        downstream = insert_step(repository, job["id"], 1, "failed")
+        set_job(repository, job["id"], status="failed")
+        return (
+            job,
+            f"/api/jobs/{job['id']}/rollback",
+            {
+                "step_id": root,
+                "confirm_invalidated_step_ids": [root, downstream],
+            },
+            "job.rollback",
+        )
+    if action == "review":
+        step = insert_step(repository, job["id"], 0, "completed")
+        insert_step(repository, job["id"], 1, "queued")
+        set_job(repository, job["id"], status="waiting_review")
+        return (
+            job,
+            f"/api/jobs/{job['id']}/steps/{step}/review",
+            {"action": "approve", "comment": "持久去重"},
+            "job.review.approve",
+        )
+    if action == "cancel":
+        insert_step(repository, job["id"], 0, "running")
+        set_job(repository, job["id"], status="running")
+        return job, f"/api/jobs/{job['id']}/cancel", None, "job.cancel"
+    raise AssertionError(action)
+
+
+@pytest.mark.parametrize(
+    "action", ["pause", "resume", "retry", "rollback", "review", "cancel"]
+)
+def test_command_idempotency_survives_new_client_and_runs_side_effect_once(
+    app_factory, valid_job_payload, action
+):
+    class CountingRunner:
+        calls = 0
+
+        def cancel(self, _job_id):
+            self.calls += 1
+            return True
+
+    runner = CountingRunner()
+    first_client = app_factory(runner)
+    job, url, body, event_type = _command_fixture(
+        first_client, valid_job_payload, action
+    )
+    headers = {"Idempotency-Key": f"durable-{action}-command-0001"}
+
+    first = first_client.post(url, json=body, headers=headers)
+    assert first.status_code == 200, first.text
+    first_snapshot = first.json()
+
+    second_client = app_factory(runner)
+    second = second_client.post(url, json=body, headers=headers)
+
+    assert second.status_code == 200, second.text
+    assert second.json() == first_snapshot
+    repository = second_client.app.state.job_service.repository
+    assert events(repository, job["id"]).count(event_type) == 1
+    with repository.database.connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) AS n FROM job_commands WHERE idempotency_key=?",
+            (headers["Idempotency-Key"],),
+        ).fetchone()["n"] == 1
+        review_count = connection.execute(
+            "SELECT count(*) AS n FROM review_actions WHERE job_id=?",
+            (job["id"],),
+        ).fetchone()["n"]
+    assert review_count == (1 if action == "review" else 0)
+    assert runner.calls == (1 if action == "cancel" else 0)
+
+
+def test_idempotency_key_reuse_with_different_action_or_payload_conflicts(
+    client, valid_job_payload
+):
+    job = create(client, valid_job_payload)
+    repository = client.app.state.job_service.repository
+    key = "conflicting-command-key-0001"
+    assert client.post(
+        f"/api/jobs/{job['id']}/pause", headers={"Idempotency-Key": key}
+    ).status_code == 200
+    before_resume = repository.get_job(job["id"])
+    assert client.post(
+        f"/api/jobs/{job['id']}/resume", headers={"Idempotency-Key": key}
+    ).status_code == 409
+    assert repository.get_job(job["id"]) == before_resume
+
+    other_key = "conflicting-payload-key-0001"
+    first_step = insert_step(repository, job["id"], 0, "failed")
+    second_step = insert_step(repository, job["id"], 1, "failed")
+    set_job(repository, job["id"], status="failed")
+    assert client.post(
+        f"/api/jobs/{job['id']}/retry",
+        json={"step_id": first_step},
+        headers={"Idempotency-Key": other_key},
+    ).status_code == 200
+    set_job(repository, job["id"], status="failed")
+    before_retry = repository.get_job(job["id"])
+    before_events = events(repository, job["id"])
+    assert client.post(
+        f"/api/jobs/{job['id']}/retry",
+        json={"step_id": second_step},
+        headers={"Idempotency-Key": other_key},
+    ).status_code == 409
+    assert repository.get_job(job["id"]) == before_retry
+    assert events(repository, job["id"]) == before_events
+
+
+def test_concurrent_cancel_with_same_key_runs_durable_and_runner_side_effect_once(
+    app_factory, valid_job_payload
+):
+    class CountingRunner:
+        def __init__(self):
+            self.calls = 0
+            self.lock = threading.Lock()
+
+        def cancel(self, _job_id):
+            with self.lock:
+                self.calls += 1
+            return True
+
+    runner = CountingRunner()
+    first = app_factory(runner)
+    job = create(first, valid_job_payload)
+    repository = first.app.state.job_service.repository
+    insert_step(repository, job["id"], 0, "running")
+    set_job(repository, job["id"], status="running")
+    second = app_factory(runner)
+    barrier = threading.Barrier(2)
+    key = "concurrent-cancel-command-0001"
+
+    def cancel(client):
+        barrier.wait(timeout=5)
+        return client.post(
+            f"/api/jobs/{job['id']}/cancel",
+            headers={"Idempotency-Key": key},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = [
+            future.result(timeout=10)
+            for future in (
+                executor.submit(cancel, first),
+                executor.submit(cancel, second),
+            )
+        ]
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert runner.calls == 1
+    assert events(repository, job["id"]).count("job.cancel") == 1
+
+
+def test_repeated_pause_without_key_is_noop_after_target_is_reached(
+    client, valid_job_payload
+):
+    job = create(client, valid_job_payload)
+    repository = client.app.state.job_service.repository
+    first = client.post(f"/api/jobs/{job['id']}/pause")
+    second = client.post(f"/api/jobs/{job['id']}/pause")
+
+    assert first.status_code == second.status_code == 200
+    assert second.json() == first.json()
+    assert events(repository, job["id"]).count("job.pause") == 1
+
+
+def test_pause_waiting_review_is_conflict_without_any_write(
+    client, valid_job_payload
+):
+    job = create(client, valid_job_payload, mode="manual_review")
+    repository = client.app.state.job_service.repository
+    step = insert_step(repository, job["id"], 0, "completed")
+    insert_artifact(repository, job["id"], step)
+    set_job(repository, job["id"], status="waiting_review")
+    before_job = repository.get_job(job["id"])
+    with repository.database.connection() as connection:
+        before_tables = {
+            table: [dict(row) for row in connection.execute(
+                f"SELECT * FROM {table} WHERE job_id=? ORDER BY id", (job["id"],)
+            )]
+            for table in ("artifacts", "review_actions", "job_events")
+        }
+
+    response = client.post(f"/api/jobs/{job['id']}/pause")
+
+    assert response.status_code == 409
+    assert repository.get_job(job["id"]) == before_job
+    with repository.database.connection() as connection:
+        assert {
+            table: [dict(row) for row in connection.execute(
+                f"SELECT * FROM {table} WHERE job_id=? ORDER BY id", (job["id"],)
+            )]
+            for table in before_tables
+        } == before_tables
+
+
+def test_approve_waiting_review_step_completes_it_and_exposes_next_step(
+    client, valid_job_payload
+):
+    job = create(client, valid_job_payload, mode="manual_review")
+    repository = client.app.state.job_service.repository
+    reviewed = insert_step(repository, job["id"], 0, "waiting_review", progress=.8)
+    next_step = insert_step(
+        repository, job["id"], 1, "pending", stage_key="next-stage", shot_id="shot-2"
+    )
+    set_job(repository, job["id"], status="waiting_review")
+
+    response = client.post(
+        f"/api/jobs/{job['id']}/steps/{reviewed}/review",
+        json={"action": "approve"},
+    )
+
+    assert response.status_code == 200
+    restored = response.json()
+    by_id = {step["id"]: step for step in restored["steps"]}
+    assert by_id[reviewed]["status"] == "completed"
+    assert by_id[reviewed]["progress"] == 1
+    assert restored["status"] == "queued"
+    assert restored["current_stage"] == "next-stage"
+    assert restored["current_shot"] == "shot-2"
+    assert repository.current_step_id(job["id"]) == next_step
+
+
+def test_approve_last_waiting_review_step_finishes_job_consistently(
+    client, valid_job_payload
+):
+    job = create(client, valid_job_payload, mode="manual_review")
+    repository = client.app.state.job_service.repository
+    reviewed = insert_step(repository, job["id"], 0, "waiting_review", progress=.6)
+    set_job(
+        repository,
+        job["id"],
+        status="waiting_review",
+        final_video="output/final.mp4",
+    )
+
+    response = client.post(
+        f"/api/jobs/{job['id']}/steps/{reviewed}/review",
+        json={"action": "approve"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["progress"] == 1
+    assert response.json()["final_video"] == "output/final.mp4"
+    assert response.json()["finished_at"] is not None
+    with pytest.raises(LookupError, match="no active step"):
+        repository.current_step_id(job["id"])
+
+
+@pytest.mark.parametrize("command", ["retry", "rollback", "review-edit", "review-retry"])
+def test_reset_commands_recompute_stale_job_execution_summary(
+    client, valid_job_payload, command
+):
+    job = create(
+        client,
+        valid_job_payload,
+        mode="manual_review" if command.startswith("review") else "automatic",
+    )
+    repository = client.app.state.job_service.repository
+    insert_step(repository, job["id"], 0, "completed", progress=1, stage_key="done")
+    target_status = "failed" if command == "retry" else "completed"
+    target = insert_step(
+        repository,
+        job["id"],
+        1,
+        target_status,
+        progress=.8,
+        stage_key="restart-here",
+        shot_id="shot-a",
+    )
+    if command == "retry":
+        set_job(repository, job["id"], status="failed")
+        url = f"/api/jobs/{job['id']}/retry"
+        body = {"step_id": target}
+        expected_progress = .5
+    else:
+        downstream = insert_step(
+            repository,
+            job["id"],
+            2,
+            "completed",
+            progress=1,
+            stage_key="later",
+            shot_id="shot-a",
+        )
+        if command == "rollback":
+            set_job(repository, job["id"], status="failed")
+            url = f"/api/jobs/{job['id']}/rollback"
+            body = {
+                "step_id": target,
+                "confirm_invalidated_step_ids": [target, downstream],
+            }
+        else:
+            set_job(repository, job["id"], status="waiting_review")
+            action = command.removeprefix("review-")
+            url = f"/api/jobs/{job['id']}/steps/{target}/review"
+            body = {
+                "action": action,
+                "patch": {"shot_duration": 8} if action == "edit" else {},
+            }
+        expected_progress = pytest.approx(1 / 3)
+    set_job(
+        repository,
+        job["id"],
+        progress=.95,
+        current_stage="final_compose",
+        current_shot="shot-99",
+    )
+
+    response = client.post(url, json=body)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"] == expected_progress
+    assert response.json()["current_stage"] == "restart-here"
+    assert response.json()["current_shot"] == "shot-a"
+
+
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity"])
+def test_review_patch_rejects_non_finite_json_with_422_and_no_write(
+    app_factory, valid_job_payload, number
+):
+    client = app_factory(raise_server_exceptions=False)
+    job = create(client, valid_job_payload, mode="manual_review")
+    repository = client.app.state.job_service.repository
+    step = insert_step(repository, job["id"], 0, "completed")
+    set_job(repository, job["id"], status="waiting_review")
+    before = repository.get_job(job["id"])
+    before_events = events(repository, job["id"])
+
+    response = client.post(
+        f"/api/jobs/{job['id']}/steps/{step}/review",
+        content=(
+            '{"action":"edit","patch":{"options":{"nested":['
+            + number
+            + "]}}}"
+        ),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert repository.get_job(job["id"]) == before
+    assert events(repository, job["id"]) == before_events
+    with repository.database.connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) AS n FROM review_actions WHERE job_id=?", (job["id"],)
+        ).fetchone()["n"] == 0
+
+
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity"])
+def test_job_options_reject_non_finite_json_with_422(client, valid_job_payload, number):
+    body = json.dumps(valid_job_payload, ensure_ascii=False)
+    body = body.replace('{"language": "zh-CN"}', '{"score": ' + number + "}")
+
+    response = client.post(
+        "/api/jobs", content=body, headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 422
+    assert client.get("/api/jobs").json()["items"] == []
+
+
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity"])
+def test_job_numeric_fields_reject_non_finite_json_with_422(
+    app_factory, valid_job_payload, number
+):
+    client = app_factory(raise_server_exceptions=False)
+    body = json.dumps(valid_job_payload, ensure_ascii=False)
+    body = body.replace('"shot_duration": 5', '"shot_duration": ' + number)
+
+    response = client.post(
+        "/api/jobs", content=body, headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 422
+    assert client.get("/api/jobs").json()["items"] == []
+
+
+@pytest.mark.parametrize("poll_seconds", [0, -0.1, float("nan")])
+def test_event_stream_rejects_non_positive_or_non_finite_poll_interval(
+    client, poll_seconds
+):
+    with pytest.raises(ValueError, match="poll_seconds"):
+        event_stream(
+            client.app.state.job_service,
+            "missing",
+            lambda: asyncio.sleep(0, result=False),
+            poll_seconds=poll_seconds,
+        )

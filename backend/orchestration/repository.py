@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
@@ -38,6 +40,12 @@ class JobNotFoundError(LookupError):
 
 class JobConflictError(RuntimeError):
     """Raised when durable state does not permit a requested command."""
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    job: dict[str, Any]
+    applied: bool
 
 
 class JobRepository:
@@ -158,19 +166,56 @@ class JobRepository:
             ).fetchall()
         return [rowdict(row) for row in rows]
 
-    def request_state(self, job_id: str, desired: str) -> dict[str, Any]:
+    def request_state(
+        self,
+        job_id: str,
+        desired: str,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        return self._request_state(job_id, desired, idempotency_key).job
+
+    def cancel_job(
+        self, job_id: str, idempotency_key: str | None = None
+    ) -> CommandResult:
+        return self._request_state(job_id, "cancelled", idempotency_key)
+
+    def _request_state(
+        self,
+        job_id: str,
+        desired: str,
+        idempotency_key: str | None,
+    ) -> CommandResult:
         if desired not in {"paused", "cancelled"}:
             raise ValueError("unsupported desired state")
         with self.database.transaction() as connection:
             job = connection.execute(
-                "SELECT status, desired_state FROM jobs WHERE id=?", (job_id,)
+                "SELECT * FROM jobs WHERE id=?", (job_id,)
             ).fetchone()
             if job is None:
                 raise JobNotFoundError(f"job {job_id!r} does not exist")
+            action = "pause" if desired == "paused" else "cancel"
+            if not self._register_command(
+                connection, job_id, action, {}, idempotency_key
+            ):
+                return CommandResult(
+                    self._job_with_steps(connection, job), False
+                )
             timestamp = utcnow()
             if desired == "paused":
-                if job["status"] in {"completed", "cancelled", "failed"}:
+                if job["status"] in {
+                    "completed", "cancelled", "failed", "waiting_review"
+                }:
                     raise JobConflictError("job cannot be paused from its current state")
+                if (
+                    job["status"] == "running"
+                    and job["desired_state"] == "paused"
+                ) or (
+                    job["status"] == "paused"
+                    and job["desired_state"] == "paused"
+                ):
+                    return CommandResult(
+                        self._job_with_steps(connection, job), False
+                    )
                 if job["status"] == "running":
                     connection.execute(
                         """
@@ -194,34 +239,45 @@ class JobRepository:
             else:
                 if job["status"] == "completed":
                     raise JobConflictError("completed job cannot be cancelled")
-                if job["status"] != "cancelled":
-                    connection.execute(
-                        """
-                        UPDATE job_steps
-                        SET status='cancelled', finished_at=?
-                        WHERE job_id=? AND status NOT IN ('completed', 'cancelled')
-                        """,
-                        (timestamp, job_id),
+                if job["status"] == "cancelled":
+                    return CommandResult(
+                        self._job_with_steps(connection, job), False
                     )
-                    connection.execute(
-                        """
-                        UPDATE jobs SET status='cancelled', desired_state='cancelled',
-                            message='已取消', run_after=NULL, worker_id=NULL,
-                            lease_until=NULL, finished_at=?, updated_at=?
-                        WHERE id=?
-                        """,
-                        (timestamp, timestamp, job_id),
-                    )
+                connection.execute(
+                    """
+                    UPDATE job_steps
+                    SET status='cancelled', finished_at=?
+                    WHERE job_id=? AND status NOT IN ('completed', 'cancelled')
+                    """,
+                    (timestamp, job_id),
+                )
+                connection.execute(
+                    """
+                    UPDATE jobs SET status='cancelled', desired_state='cancelled',
+                        message='已取消', run_after=NULL, worker_id=NULL,
+                        lease_until=NULL, finished_at=?, updated_at=?
+                    WHERE id=?
+                    """,
+                    (timestamp, timestamp, job_id),
+                )
                 self._append_event(connection, job_id, "job.cancel", {})
-        return self.get_job(job_id)
+            return CommandResult(
+                self._job_in_transaction(connection, job_id), True
+            )
 
-    def resume_job(self, job_id: str) -> dict[str, Any]:
+    def resume_job(
+        self, job_id: str, idempotency_key: str | None = None
+    ) -> dict[str, Any]:
         with self.database.transaction() as connection:
             job = connection.execute(
-                "SELECT status, desired_state FROM jobs WHERE id=?", (job_id,)
+                "SELECT * FROM jobs WHERE id=?", (job_id,)
             ).fetchone()
             if job is None:
                 raise JobNotFoundError(f"job {job_id!r} does not exist")
+            if not self._register_command(
+                connection, job_id, "resume", {}, idempotency_key
+            ):
+                return self._job_with_steps(connection, job)
             timestamp = utcnow()
             if job["status"] == "running" and job["desired_state"] == "paused":
                 connection.execute(
@@ -253,17 +309,28 @@ class JobRepository:
             else:
                 raise JobConflictError("job is not resumable")
             self._append_event(connection, job_id, "job.resume", {})
-        return self.get_job(job_id)
+            return self._job_in_transaction(connection, job_id)
 
     def retry_failed_step(
-        self, job_id: str, step_id: str | None
+        self,
+        job_id: str,
+        step_id: str | None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         with self.database.transaction() as connection:
             job = connection.execute(
-                "SELECT status FROM jobs WHERE id=?", (job_id,)
+                "SELECT * FROM jobs WHERE id=?", (job_id,)
             ).fetchone()
             if job is None:
                 raise JobNotFoundError(f"job {job_id!r} does not exist")
+            if not self._register_command(
+                connection,
+                job_id,
+                "retry",
+                {"step_id": step_id},
+                idempotency_key,
+            ):
+                return self._job_with_steps(connection, job)
             if job["status"] != "failed":
                 raise JobConflictError("job is not in a retryable state")
             if step_id is None:
@@ -300,7 +367,8 @@ class JobRepository:
             self._append_event(
                 connection, job_id, "job.retry", {"step_id": target}
             )
-        return self.get_job(job_id)
+            self._recompute_job_summary(connection, job_id)
+            return self._job_in_transaction(connection, job_id)
 
     def rollback_preview(self, job_id: str, step_id: str) -> list[str]:
         with self.database.connection() as connection:
@@ -315,14 +383,25 @@ class JobRepository:
         job_id: str,
         step_id: str,
         confirmed: list[str],
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         with self.database.transaction() as connection:
             job = connection.execute(
-                "SELECT status FROM jobs WHERE id=?", (job_id,)
+                "SELECT * FROM jobs WHERE id=?", (job_id,)
             ).fetchone()
             if job is None:
                 raise JobNotFoundError(f"job {job_id!r} does not exist")
-            if job["status"] in {"running", "completed", "cancelled"}:
+            if not self._register_command(
+                connection,
+                job_id,
+                "rollback",
+                {"step_id": step_id, "confirmed": confirmed},
+                idempotency_key,
+            ):
+                return self._job_with_steps(connection, job)
+            if job["status"] not in {
+                "failed", "paused", "waiting_review", "retry_wait"
+            }:
                 raise JobConflictError("job cannot be rolled back from its current state")
             affected = self._affected_step_ids(connection, job_id, step_id)
             if confirmed != affected:
@@ -346,7 +425,8 @@ class JobRepository:
                 "job.rollback",
                 {"step_id": step_id, "affected_step_ids": affected},
             )
-        return self.get_job(job_id)
+            self._recompute_job_summary(connection, job_id)
+            return self._job_in_transaction(connection, job_id)
 
     def record_review(
         self,
@@ -355,6 +435,7 @@ class JobRepository:
         action: str,
         comment: str,
         patch: dict[str, Any],
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         if action == "rollback":
             raise JobConflictError(
@@ -364,10 +445,23 @@ class JobRepository:
             raise JobConflictError("unsupported review action")
         with self.database.transaction() as connection:
             job = connection.execute(
-                "SELECT status, settings_json FROM jobs WHERE id=?", (job_id,)
+                "SELECT * FROM jobs WHERE id=?", (job_id,)
             ).fetchone()
             if job is None:
                 raise JobNotFoundError(f"job {job_id!r} does not exist")
+            if not self._register_command(
+                connection,
+                job_id,
+                "review",
+                {
+                    "step_id": step_id,
+                    "action": action,
+                    "comment": comment,
+                    "patch": patch,
+                },
+                idempotency_key,
+            ):
+                return self._job_with_steps(connection, job)
             if job["status"] != "waiting_review":
                 raise JobConflictError("job is not waiting for review")
             step = connection.execute(
@@ -404,6 +498,15 @@ class JobRepository:
                 affected = self._affected_step_ids(connection, job_id, step_id)
                 self._reset_steps(connection, job_id, affected)
             timestamp = utcnow()
+            if action == "approve" and step["status"] == "waiting_review":
+                connection.execute(
+                    """
+                    UPDATE job_steps SET status='completed', progress=1,
+                        error_code='', error_message='', finished_at=?
+                    WHERE id=? AND job_id=? AND status='waiting_review'
+                    """,
+                    (timestamp, step_id, job_id),
+                )
             connection.execute(
                 """
                 INSERT INTO review_actions(
@@ -420,14 +523,37 @@ class JobRepository:
                     timestamp,
                 ),
             )
+            has_active_step = connection.execute(
+                """
+                SELECT 1 FROM job_steps
+                WHERE job_id=? AND status IN (
+                    'pending', 'queued', 'running', 'waiting_review',
+                    'retry_wait', 'failed'
+                )
+                LIMIT 1
+                """,
+                (job_id,),
+            ).fetchone() is not None
+            target_status = "queued" if has_active_step else "completed"
             connection.execute(
                 """
-                UPDATE jobs SET status='queued', desired_state='running',
-                    message='审核已处理', final_video='', run_after=NULL,
-                    worker_id=NULL, lease_until=NULL, finished_at=NULL, updated_at=?
+                UPDATE jobs SET status=?, desired_state='running',
+                    message='审核已处理',
+                    final_video=CASE WHEN ?='approve' THEN final_video ELSE '' END,
+                    run_after=NULL,
+                    worker_id=NULL, lease_until=NULL,
+                    finished_at=CASE WHEN ?='completed' THEN ? ELSE NULL END,
+                    updated_at=?
                 WHERE id=?
                 """,
-                (timestamp, job_id),
+                (
+                    target_status,
+                    action,
+                    target_status,
+                    timestamp,
+                    timestamp,
+                    job_id,
+                ),
             )
             self._append_event(
                 connection,
@@ -435,7 +561,113 @@ class JobRepository:
                 f"job.review.{action}",
                 {"step_id": step_id},
             )
-        return self.get_job(job_id)
+            self._recompute_job_summary(connection, job_id)
+            return self._job_in_transaction(connection, job_id)
+
+    @staticmethod
+    def _register_command(
+        connection: sqlite3.Connection,
+        job_id: str,
+        action: str,
+        payload: dict[str, Any],
+        idempotency_key: str | None,
+    ) -> bool:
+        if idempotency_key is None:
+            return True
+        serialized = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        existing = connection.execute(
+            """
+            SELECT job_id, action, request_fingerprint
+            FROM job_commands WHERE idempotency_key=?
+            """,
+            (idempotency_key,),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["job_id"] == job_id
+                and existing["action"] == action
+                and existing["request_fingerprint"] == fingerprint
+            ):
+                return False
+            raise JobConflictError(
+                "idempotency key was already used for a different command"
+            )
+        connection.execute(
+            """
+            INSERT INTO job_commands(
+                idempotency_key, job_id, action, request_fingerprint, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (idempotency_key, job_id, action, fingerprint, utcnow()),
+        )
+        return True
+
+    @classmethod
+    def _job_in_transaction(
+        cls, connection: sqlite3.Connection, job_id: str
+    ) -> dict[str, Any]:
+        row = connection.execute(
+            "SELECT * FROM jobs WHERE id=?", (job_id,)
+        ).fetchone()
+        if row is None:
+            raise JobNotFoundError(f"job {job_id!r} does not exist")
+        return cls._job_with_steps(connection, row)
+
+    @staticmethod
+    def _recompute_job_summary(
+        connection: sqlite3.Connection, job_id: str
+    ) -> None:
+        rows = connection.execute(
+            """
+            SELECT stage_key, shot_id, status, progress
+            FROM job_steps
+            WHERE job_id=? AND status NOT IN ('invalidated', 'cancelled')
+            ORDER BY
+                CASE status WHEN 'running' THEN 0 ELSE 1 END,
+                sequence, shot_id, id
+            """,
+            (job_id,),
+        ).fetchall()
+        active = next(
+            (
+                row
+                for row in rows
+                if row["status"]
+                in {
+                    "pending",
+                    "queued",
+                    "running",
+                    "waiting_review",
+                    "retry_wait",
+                    "failed",
+                }
+            ),
+            None,
+        )
+        progress = (
+            sum(float(row["progress"]) for row in rows) / len(rows)
+            if rows
+            else 0.0
+        )
+        connection.execute(
+            """
+            UPDATE jobs SET progress=?, current_stage=?, current_shot=?
+            WHERE id=?
+            """,
+            (
+                progress,
+                "" if active is None else active["stage_key"],
+                "" if active is None else active["shot_id"],
+                job_id,
+            ),
+        )
 
     @staticmethod
     def _append_event(

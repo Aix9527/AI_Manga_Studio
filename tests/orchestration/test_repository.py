@@ -283,8 +283,35 @@ def test_migration_version_is_recorded_once_across_reopens(tmp_path):
     with second.connection() as connection:
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
 
-    assert [row["version"] for row in versions] == [1, 2]
+    assert [row["version"] for row in versions] == [1, 2, 3]
     assert foreign_keys == 1
+
+
+def test_v3_adds_durable_command_idempotency_registry(tmp_path):
+    database_path = tmp_path / "orchestration.db"
+    database = OrchestrationDatabase(database_path)
+    OrchestrationDatabase(database_path)
+
+    with database.connection() as connection:
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        columns = connection.execute(
+            "PRAGMA table_info('job_commands')"
+        ).fetchall()
+        indexes = connection.execute(
+            "PRAGMA index_list('job_commands')"
+        ).fetchall()
+
+    assert [row["version"] for row in versions] == [1, 2, 3]
+    assert [row["name"] for row in columns] == [
+        "idempotency_key",
+        "job_id",
+        "action",
+        "request_fingerprint",
+        "created_at",
+    ]
+    assert any(row["origin"] == "pk" and row["unique"] for row in indexes)
 
 
 def test_event_cursor_index_uses_job_id_then_event_id(tmp_path):
@@ -312,7 +339,7 @@ def test_v2_replaces_legacy_event_index(tmp_path):
         ).fetchall()
 
     assert [row["name"] for row in columns] == ["job_id", "id"]
-    assert [row["version"] for row in versions] == [1, 2]
+    assert [row["version"] for row in versions] == [1, 2, 3]
 
 
 def test_reopen_does_not_rebuild_correct_event_index(tmp_path):
@@ -385,7 +412,7 @@ def test_v2_upgrades_legacy_artifacts_and_preserves_validated_rows(tmp_path):
                 (row["seq"], row["from"], row["to"], row["on_delete"])
             )
 
-    assert [row["version"] for row in versions] == [1, 2]
+    assert [row["version"] for row in versions] == [1, 2, 3]
     assert validated_at["type"] == "TEXT"
     assert validated_at["notnull"] == 1
     assert artifact["validated_at"] == "2026-01-01T00:00:00+00:00"

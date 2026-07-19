@@ -21,16 +21,18 @@ def api_database_path(tmp_path):
 
 @pytest.fixture
 def app_factory(api_database_path):
-    def factory(runner=None):
+    def factory(runner=None, *, raise_server_exceptions=True):
         app = FastAPI()
         repository = JobRepository(OrchestrationDatabase(api_database_path))
         app.state.job_service = JobService(
             repository,
             runner or SimpleNamespace(cancel=lambda _job_id: True),
         )
-        app.state.sse_poll_seconds = 0
+        app.state.sse_poll_seconds = .001
         app.include_router(router)
-        return TestClient(app)
+        return TestClient(
+            app, raise_server_exceptions=raise_server_exceptions
+        )
 
     return factory
 
