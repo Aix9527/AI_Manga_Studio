@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.orchestration.worker import DurableWorker, StepExecutionError
+from backend.orchestration.worker import DurableWorker, StepExecutionError, _OnceFlag
 from backend.orchestration.checkpoints import ArtifactDraft
 from backend.orchestration.repository import JobRepository, LeaseOwnershipError
 
@@ -18,6 +18,27 @@ from conftest import create_job, insert_step, set_job
 
 
 NOW = datetime(2026, 7, 19, 4, 0, tzinfo=timezone.utc)
+
+
+def test_once_flag_has_exactly_one_winner_across_concurrent_claims():
+    contenders = 8
+    barrier = threading.Barrier(contenders)
+    once = _OnceFlag()
+
+    def claim_at_once():
+        barrier.wait(timeout=2)
+        return once.claim()
+
+    with ThreadPoolExecutor(max_workers=contenders) as executor:
+        results = [
+            future.result(timeout=5)
+            for future in [
+                executor.submit(claim_at_once) for _ in range(contenders)
+            ]
+        ]
+
+    assert results.count(True) == 1
+    assert results.count(False) == contenders - 1
 
 
 @dataclass
