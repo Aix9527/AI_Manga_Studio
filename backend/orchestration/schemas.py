@@ -108,6 +108,12 @@ class JobCreate(FiniteJsonRequest):
         return cleaned
 
 
+class ArtifactView(BaseModel):
+    kind: str
+    path: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class JobStepView(BaseModel):
     id: str
     stage_key: str
@@ -117,6 +123,7 @@ class JobStepView(BaseModel):
     progress: float = Field(ge=0.0, le=1.0)
     error_code: str = ""
     error_message: str = ""
+    artifacts: list[ArtifactView] = Field(default_factory=list)
 
 
 class JobView(BaseModel):

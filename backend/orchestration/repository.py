@@ -59,6 +59,12 @@ class JobRepository:
                 (request.idempotency_key,),
             ).fetchone()
             if existing is not None:
+                persisted = json.loads(existing["settings_json"])
+                incoming = request.model_dump(mode="json")
+                if self._canonical_json(persisted) != self._canonical_json(incoming):
+                    raise JobConflictError(
+                        "idempotency key was already used for a different job request"
+                    )
                 return rowdict(existing)
 
             job_id = str(uuid4())
@@ -574,13 +580,7 @@ class JobRepository:
     ) -> bool:
         if idempotency_key is None:
             return True
-        serialized = json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        serialized = JobRepository._canonical_json(payload)
         fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
         existing = connection.execute(
             """
@@ -608,6 +608,16 @@ class JobRepository:
             (idempotency_key, job_id, action, fingerprint, utcnow()),
         )
         return True
+
+    @staticmethod
+    def _canonical_json(value: Any) -> str:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
 
     @classmethod
     def _job_in_transaction(
@@ -1438,5 +1448,29 @@ class JobRepository:
             """,
             (job["id"],),
         ).fetchall()
-        job["steps"] = [rowdict(row) for row in step_rows]
+        steps = [rowdict(row) for row in step_rows]
+        steps_by_id = {step["id"]: step for step in steps}
+        for step in steps:
+            step["artifacts"] = []
+        artifact_rows = connection.execute(
+            """
+            SELECT step_id, kind, path, metadata_json
+            FROM artifacts
+            WHERE job_id=? AND active=1
+            ORDER BY step_id, path, kind, id
+            """,
+            (job["id"],),
+        ).fetchall()
+        for artifact in artifact_rows:
+            step = steps_by_id.get(artifact["step_id"])
+            if step is None:
+                continue
+            step["artifacts"].append(
+                {
+                    "kind": artifact["kind"],
+                    "path": artifact["path"],
+                    "metadata": json.loads(artifact["metadata_json"]),
+                }
+            )
+        job["steps"] = steps
         return job

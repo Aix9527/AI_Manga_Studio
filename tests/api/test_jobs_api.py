@@ -26,15 +26,81 @@ def test_current_job_and_idempotency_survive_new_app_instance(
     first = app_factory()
     assert first.get("/api/jobs/current").json() is None
     created = create(first, valid_job_payload)
-    duplicate = create(first, valid_job_payload, project_id="ignored-by-idempotency")
 
     second = app_factory()
+    duplicate = create(second, valid_job_payload)
     restored = second.get("/api/jobs/current")
 
     assert duplicate["id"] == created["id"]
     assert restored.status_code == 200
     assert restored.json()["id"] == created["id"]
     assert restored.json()["settings"]["project_id"] == "测试项目"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"project_id": "不同项目"},
+        {"input_path": "input/other.txt"},
+        {"input_type": "script"},
+        {"mode": "manual_review"},
+        {"shot_duration": 8},
+        {"width": 1280},
+        {"height": 1280},
+        {"fps": 30},
+        {"options": {"language": "en"}},
+    ],
+)
+def test_create_idempotency_key_conflicts_on_any_semantic_payload_change(
+    app_factory, valid_job_payload, changes
+):
+    first = app_factory()
+    created = create(first, valid_job_payload)
+    repository = first.app.state.job_service.repository
+    before_job = repository.get_job(created["id"])
+    before_events = repository.list_events(created["id"])
+
+    second = app_factory()
+    response = second.post(
+        "/api/jobs", json={**valid_job_payload, **changes}
+    )
+
+    assert response.status_code == 409
+    assert repository.get_job(created["id"]) == before_job
+    assert repository.list_events(created["id"]) == before_events
+    assert repository.list_jobs() == [
+        {key: value for key, value in created.items() if key not in {"settings", "steps"}}
+    ]
+
+
+def test_concurrent_creates_with_same_key_and_different_payload_have_one_winner(
+    app_factory, valid_job_payload
+):
+    first = app_factory()
+    second = app_factory()
+    barrier = threading.Barrier(2)
+
+    def submit(client, project_id):
+        barrier.wait(timeout=5)
+        return client.post(
+            "/api/jobs",
+            json={**valid_job_payload, "project_id": project_id},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = [
+            future.result(timeout=10)
+            for future in (
+                executor.submit(submit, first, "并发项目甲"),
+                executor.submit(submit, second, "并发项目乙"),
+            )
+        ]
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    repository = first.app.state.job_service.repository
+    jobs = repository.list_jobs()
+    assert len(jobs) == 1
+    assert events(repository, jobs[0]["id"]) == ["job.created"]
 
 
 def test_get_list_and_query_validation(client, valid_job_payload):
@@ -581,6 +647,97 @@ def test_sse_gone_ends_and_route_sets_streaming_headers(client):
     assert response.headers["content-type"].startswith("text/event-stream")
     assert response.headers["cache-control"] == "no-cache"
     assert response.headers["x-accel-buffering"] == "no"
+
+
+def test_job_detail_and_current_include_active_artifacts_in_one_query(
+    client, valid_job_payload, monkeypatch
+):
+    job = create(client, valid_job_payload)
+    repository = client.app.state.job_service.repository
+    with_artifacts = insert_step(repository, job["id"], 0, "completed")
+    without_artifacts = insert_step(repository, job["id"], 1, "queued")
+    active_ids = [
+        insert_artifact(repository, job["id"], with_artifacts),
+        insert_artifact(repository, job["id"], with_artifacts),
+    ]
+    inactive_id = insert_artifact(repository, job["id"], with_artifacts)
+    with repository.database.transaction() as connection:
+        connection.execute(
+            "UPDATE artifacts SET metadata_json=? WHERE id=?",
+            ('{"角色":"小雨","frame":1}', active_ids[0]),
+        )
+        connection.execute(
+            "UPDATE artifacts SET active=0, metadata_json=? WHERE id=?",
+            ('{"historical":true}', inactive_id),
+        )
+
+    queries = []
+    original_connect = repository.database.connect
+
+    def traced_connect():
+        connection = original_connect()
+        connection.set_trace_callback(queries.append)
+        return connection
+
+    monkeypatch.setattr(repository.database, "connect", traced_connect)
+    detail = client.get(f"/api/jobs/{job['id']}")
+
+    assert detail.status_code == 200
+    by_id = {step["id"]: step for step in detail.json()["steps"]}
+    artifacts = by_id[with_artifacts]["artifacts"]
+    assert len(artifacts) == 2
+    assert [item["path"] for item in artifacts] == sorted(
+        item["path"] for item in artifacts
+    )
+    assert any(item["metadata"] == {"角色": "小雨", "frame": 1} for item in artifacts)
+    assert by_id[without_artifacts]["artifacts"] == []
+    assert all(item["metadata"] != {"historical": True} for item in artifacts)
+    artifact_queries = [
+        query for query in queries if "FROM artifacts" in query
+    ]
+    assert len(artifact_queries) == 1
+
+    queries.clear()
+    current = client.get("/api/jobs/current")
+    assert current.status_code == 200
+    current_by_id = {step["id"]: step for step in current.json()["steps"]}
+    assert current_by_id[with_artifacts]["artifacts"] == artifacts
+    assert len([query for query in queries if "FROM artifacts" in query]) == 1
+
+
+def test_artifact_activation_changes_sse_snapshot_and_stable_event_id(
+    client, valid_job_payload
+):
+    job = create(client, valid_job_payload)
+    service = client.app.state.job_service
+    repository = service.repository
+    step = insert_step(repository, job["id"], 0, "queued")
+
+    async def scenario():
+        stream = event_stream(
+            service,
+            job["id"],
+            lambda: asyncio.sleep(0, result=False),
+            poll_seconds=.001,
+        )
+        initial = _parse_sse(await anext(stream))
+        assert json.loads(initial["data"])["steps"][0]["artifacts"] == []
+
+        artifact_id = insert_artifact(repository, job["id"], step)
+        active = _parse_sse(await anext(stream))
+        assert active["id"] != initial["id"]
+        assert len(json.loads(active["data"])["steps"][0]["artifacts"]) == 1
+
+        with repository.database.transaction() as connection:
+            connection.execute(
+                "UPDATE artifacts SET active=0 WHERE id=?", (artifact_id,)
+            )
+        inactive = _parse_sse(await anext(stream))
+        assert inactive["id"] != active["id"]
+        assert json.loads(inactive["data"])["steps"][0]["artifacts"] == []
+        await stream.aclose()
+
+    asyncio.run(scenario())
 
 
 def _command_fixture(client, valid_job_payload, action):

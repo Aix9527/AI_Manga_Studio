@@ -36,7 +36,7 @@ def _command(operation):
 
 @router.post("")
 def create_job(command: JobCreate, request: Request):
-    return _service(request).create(command)
+    return _command(lambda: _service(request).create(command))
 
 
 @router.get("/current")
