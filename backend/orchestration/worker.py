@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import logging
+import math
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Protocol
 from uuid import uuid4
 
 from backend.orchestration.repository import LeaseOwnershipError
+
+
+logger = logging.getLogger(__name__)
 
 
 class StepExecutionError(RuntimeError):
@@ -34,11 +39,18 @@ class DurableWorker:
         heartbeat_seconds: float | None = None,
         worker_id: str | None = None,
     ):
+        if not math.isfinite(lease_seconds):
+            raise ValueError("lease_seconds must be finite")
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
-        if retry_delays is not None and any(delay < 0 for delay in retry_delays):
-            raise ValueError("retry delays must be non-negative")
+        if retry_delays is not None:
+            if any(not math.isfinite(delay) for delay in retry_delays):
+                raise ValueError("retry delays must be finite")
+            if any(delay < 0 for delay in retry_delays):
+                raise ValueError("retry delays must be non-negative")
         heartbeat = lease_seconds / 3 if heartbeat_seconds is None else heartbeat_seconds
+        if not math.isfinite(heartbeat):
+            raise ValueError("heartbeat_seconds must be finite")
         if heartbeat <= 0 or heartbeat >= lease_seconds:
             raise ValueError("heartbeat_seconds must be positive and less than lease_seconds")
 
@@ -66,7 +78,9 @@ class DurableWorker:
             return False
 
         try:
-            self.repository.ensure_bootstrap_step(job["id"])
+            self.repository.ensure_bootstrap_step(
+                job["id"], expected_worker_id=self.worker_id
+            )
         except LookupError:
             pass
 
@@ -78,7 +92,14 @@ class DurableWorker:
             if cancel_sent.is_set():
                 return
             cancel_sent.set()
-            self.runner.cancel(job["id"])
+            try:
+                self.runner.cancel(job["id"])
+            except Exception:
+                logger.warning(
+                    "runner cancellation failed for job %s",
+                    job["id"],
+                    exc_info=True,
+                )
 
         def heartbeat() -> None:
             while not heartbeat_stop.wait(self.heartbeat_seconds):
@@ -92,16 +113,29 @@ class DurableWorker:
                     )
                 except Exception:
                     lease_lost.set()
+                    request_cancel_once()
                     return
                 if not renewed:
                     lease_lost.set()
+                    request_cancel_once()
                     return
                 try:
                     if self.repository.is_cancel_requested(job["id"]):
                         request_cancel_once()
                 except Exception:
                     lease_lost.set()
+                    request_cancel_once()
                     return
+
+        def cancellation_requested() -> bool:
+            if lease_lost.is_set():
+                return True
+            try:
+                return self.repository.is_cancel_requested(job["id"])
+            except Exception:
+                lease_lost.set()
+                request_cancel_once()
+                return True
 
         heartbeat_thread = threading.Thread(
             target=heartbeat,
@@ -114,7 +148,7 @@ class DurableWorker:
         try:
             outcome = self.runner.run_next(
                 job,
-                lambda: self.repository.is_cancel_requested(job["id"]),
+                cancellation_requested,
             )
         except StepExecutionError as error:
             failure = error
@@ -124,19 +158,18 @@ class DurableWorker:
             heartbeat_stop.set()
             heartbeat_thread.join()
 
-        if lease_lost.is_set():
-            return True
-
         try:
             cancel_requested = self.repository.is_cancel_requested(job["id"])
-        except LookupError:
-            return True
+        except Exception:
+            lease_lost.set()
+            request_cancel_once()
+            cancel_requested = False
         if cancel_requested:
-            try:
-                request_cancel_once()
-            except Exception:
-                pass
+            request_cancel_once()
             self.repository.finalize_cancel(job["id"])
+            return True
+
+        if lease_lost.is_set():
             return True
 
         try:
@@ -178,6 +211,7 @@ class DurableWorker:
             try:
                 worked = self.run_once()
             except Exception:
+                logger.exception("worker iteration failed")
                 worked = False
             if not worked:
                 self._stop.wait(poll_seconds)

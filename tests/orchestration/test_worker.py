@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -49,6 +50,8 @@ def test_fourth_failure_exhausts_three_retries_and_clears_lease(job_repo, queued
         "COMFY_NODE_MISSING",
         "缺少必要节点",
     )
+    assert step["finished_at"] is not None
+    assert job["finished_at"] is not None
     assert job["worker_id"] is job["lease_until"] is None
 
 
@@ -84,6 +87,20 @@ def test_explicit_empty_retry_delays_fail_on_first_attempt(job_repo, queued_job)
     assert job["steps"][0]["attempt"] == 1
 
 
+def test_retry_wait_is_nonterminal_and_clears_step_start_time(job_repo, queued_job):
+    worker = DurableWorker(job_repo, AlwaysFails(job_repo), retry_delays=[0])
+
+    assert worker.run_once() is True
+
+    job = job_repo.get_job(queued_job["id"])
+    step = job["steps"][0]
+    assert job["status"] == "retry_wait"
+    assert job["finished_at"] is None
+    assert step["status"] == "retry_wait"
+    assert step["started_at"] is None
+    assert step["finished_at"] is None
+
+
 def test_failed_step_pauses_without_run_after_until_job_is_resumed(job_repo, queued_job):
     class PausingFailure(AlwaysFails):
         def run_next(self, job, cancel_requested):
@@ -97,6 +114,9 @@ def test_failed_step_pauses_without_run_after_until_job_is_resumed(job_repo, que
     paused = job_repo.get_job(queued_job["id"])
     assert paused["status"] == "paused"
     assert paused["steps"][0]["status"] == "retry_wait"
+    assert paused["steps"][0]["started_at"] is None
+    assert paused["steps"][0]["finished_at"] is None
+    assert paused["finished_at"] is None
     assert paused["run_after"] is None
     assert paused["worker_id"] is paused["lease_until"] is None
     assert worker.run_once() is False
@@ -141,6 +161,45 @@ def test_cancel_during_run_calls_runner_once_and_preserves_completed_steps(job_r
     statuses = {step["id"]: step["status"] for step in restored["steps"]}
     assert runner.calls == 1
     assert restored["status"] == "cancelled"
+    assert statuses[completed] == "completed"
+    assert statuses[unfinished] == "cancelled"
+
+
+def test_cancel_backend_exception_does_not_prevent_durable_finalize(job_repo):
+    job = create_job(job_repo, "cancel-backend-error")
+    completed = insert_step(job_repo, job["id"], status="completed")
+    unfinished = insert_step(job_repo, job["id"], sequence=1)
+    cancel_attempted = threading.Event()
+
+    class CancelRaises:
+        calls = 0
+
+        def run_next(self, claimed, cancel_requested):
+            set_job(job_repo, claimed["id"], desired_state="cancelled")
+            assert cancel_attempted.wait(timeout=2)
+            return None
+
+        def cancel(self, job_id):
+            self.calls += 1
+            cancel_attempted.set()
+            raise RuntimeError("backend cancel unavailable")
+
+    runner = CancelRaises()
+    worker = DurableWorker(
+        job_repo,
+        runner,
+        retry_delays=[],
+        lease_seconds=1,
+        heartbeat_seconds=0.01,
+    )
+
+    assert worker.run_once() is True
+
+    restored = job_repo.get_job(job["id"])
+    statuses = {step["id"]: step["status"] for step in restored["steps"]}
+    assert runner.calls == 1
+    assert restored["status"] == "cancelled"
+    assert restored["worker_id"] is restored["lease_until"] is None
     assert statuses[completed] == "completed"
     assert statuses[unfinished] == "cancelled"
 
@@ -201,6 +260,43 @@ def test_run_once_returns_false_when_no_job(job_repo):
     worker = DurableWorker(job_repo, AlwaysFails(job_repo), retry_delays=[])
 
     assert worker.run_once() is False
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"lease_seconds": float("nan")},
+        {"lease_seconds": float("inf")},
+        {"lease_seconds": 1, "heartbeat_seconds": float("nan")},
+        {"lease_seconds": 1, "heartbeat_seconds": float("inf")},
+        {"retry_delays": [float("nan")]},
+        {"retry_delays": [float("inf")]},
+    ],
+)
+def test_worker_rejects_nonfinite_timing_values(job_repo, options):
+    with pytest.raises(ValueError, match="finite"):
+        DurableWorker(job_repo, AlwaysFails(job_repo), **options)
+
+
+def test_serve_logs_unexpected_iteration_error_and_stops(
+    job_repo, monkeypatch, caplog
+):
+    worker = DurableWorker(job_repo, AlwaysFails(job_repo), retry_delays=[])
+
+    def crash_once():
+        worker.stop()
+        raise RuntimeError("iteration crashed")
+
+    monkeypatch.setattr(worker, "run_once", crash_once)
+
+    with caplog.at_level(logging.ERROR, logger="backend.orchestration.worker"):
+        worker.serve(poll_seconds=0.01)
+
+    assert any(
+        "worker iteration failed" in record.getMessage()
+        and record.exc_info is not None
+        for record in caplog.records
+    )
 
 
 @pytest.mark.parametrize(
@@ -299,6 +395,130 @@ def test_renew_lease_requires_live_current_owner(job_repo, queued_job):
     ) is False
 
 
+def test_claim_rejects_lease_that_is_not_after_now(job_repo, queued_job):
+    now = datetime.now(timezone.utc).isoformat()
+
+    with pytest.raises(ValueError, match="lease_until must be after now"):
+        job_repo.claim_next("owner", now, now)
+
+    assert job_repo.get_job(queued_job["id"])["status"] == "queued"
+
+
+def test_renew_rejects_new_lease_that_is_not_after_now(job_repo, queued_job):
+    lease_until = (NOW + timedelta(seconds=30)).isoformat()
+    assert job_repo.claim_next("owner", NOW.isoformat(), lease_until)
+
+    assert job_repo.renew_lease(
+        queued_job["id"], "owner", NOW.isoformat(), NOW.isoformat()
+    ) is False
+    assert job_repo.get_job(queued_job["id"])["lease_until"] == lease_until
+
+
+def test_expired_owner_cannot_complete_step(job_repo, tmp_path):
+    job = create_job(job_repo, "expired-complete")
+    step_id = insert_step(job_repo, job["id"], status="running")
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        worker_id="expired-owner",
+        lease_until="2000-01-01T00:00:00+00:00",
+    )
+    output = tmp_path / "expired-complete.dat"
+    output.write_bytes(b"must not checkpoint")
+
+    with pytest.raises(LeaseOwnershipError):
+        job_repo.complete_step(
+            job["id"],
+            step_id,
+            "input-hash",
+            [ArtifactDraft.from_path("file", output)],
+            expected_worker_id="expired-owner",
+        )
+
+    restored = job_repo.get_job(job["id"])
+    assert restored["steps"][0]["status"] == "running"
+    with job_repo.database.connection() as connection:
+        assert connection.execute("SELECT 1 FROM artifacts").fetchone() is None
+
+
+def test_expired_owner_cannot_fail_step(job_repo):
+    job = create_job(job_repo, "expired-fail")
+    step_id = insert_step(job_repo, job["id"], status="running")
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        worker_id="expired-owner",
+        lease_until="2000-01-01T00:00:00+00:00",
+    )
+
+    with pytest.raises(LeaseOwnershipError):
+        job_repo.fail_or_retry_step(
+            job["id"],
+            step_id,
+            "STALE_FAILURE",
+            "must not write",
+            0,
+            None,
+            "expired-owner",
+        )
+
+    restored = job_repo.get_job(job["id"])
+    assert restored["status"] == "running"
+    assert restored["steps"][0]["attempt"] == 0
+    assert restored["steps"][0]["error_code"] == ""
+
+
+def test_expired_owner_cannot_apply_outcome(job_repo, tmp_path):
+    job = create_job(job_repo, "expired-outcome")
+    step_id = insert_step(job_repo, job["id"], status="running")
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        worker_id="expired-owner",
+        lease_until="2000-01-01T00:00:00+00:00",
+    )
+    output = tmp_path / "expired-outcome.dat"
+    output.write_bytes(b"stale outcome")
+    outcome = SimpleNamespace(
+        step_id=step_id,
+        input_hash="input-hash",
+        artifacts=[ArtifactDraft.from_path("file", output)],
+        progress=1.0,
+        message="stale",
+        final_video="",
+    )
+
+    with pytest.raises(LeaseOwnershipError):
+        job_repo.apply_step_outcome(job["id"], outcome, "expired-owner")
+
+    restored = job_repo.get_job(job["id"])
+    assert restored["status"] == "running"
+    assert restored["steps"][0]["status"] == "running"
+    with job_repo.database.connection() as connection:
+        assert connection.execute("SELECT 1 FROM artifacts").fetchone() is None
+
+
+def test_expired_owner_cannot_create_bootstrap_step(job_repo):
+    job = create_job(job_repo, "expired-bootstrap")
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        worker_id="expired-owner",
+        lease_until="2000-01-01T00:00:00+00:00",
+    )
+
+    with pytest.raises(LeaseOwnershipError):
+        job_repo.ensure_bootstrap_step(
+            job["id"], expected_worker_id="expired-owner"
+        )
+
+    assert job_repo.get_job(job["id"])["steps"] == []
+
+
 def test_worker_heartbeats_during_long_run_and_joins_thread(job_repo, queued_job, monkeypatch):
     renewed = threading.Event()
     original = job_repo.renew_lease
@@ -330,6 +550,66 @@ def test_worker_heartbeats_during_long_run_and_joins_thread(job_repo, queued_job
 
     assert worker.run_once() is True
     assert calls and calls[0] is True
+    assert not any(
+        thread.is_alive() and thread.name == f"durable-heartbeat-{worker.worker_id}"
+        for thread in threading.enumerate()
+    )
+
+
+@pytest.mark.parametrize("renew_failure", ["returns_false", "raises"])
+def test_lost_lease_notifies_runner_and_discards_old_outcome(
+    job_repo, queued_job, tmp_path, monkeypatch, renew_failure
+):
+    step_id = job_repo.get_job(queued_job["id"])["steps"][0]["id"]
+    cancel_called = threading.Event()
+    output = tmp_path / f"lost-lease-{renew_failure}.dat"
+    output.write_bytes(b"stale output")
+    outcome = SimpleNamespace(
+        step_id=step_id,
+        input_hash="stale-input",
+        artifacts=[ArtifactDraft.from_path("file", output)],
+        progress=1.0,
+        message="stale",
+        final_video="",
+    )
+
+    def lose_lease(*args, **kwargs):
+        if renew_failure == "raises":
+            raise RuntimeError("database unavailable")
+        return False
+
+    monkeypatch.setattr(job_repo, "renew_lease", lose_lease)
+
+    class WaitsForLeaseLoss:
+        calls = 0
+
+        def run_next(self, job, cancel_requested):
+            assert cancel_called.wait(timeout=2)
+            assert cancel_requested() is True
+            return outcome
+
+        def cancel(self, job_id):
+            self.calls += 1
+            cancel_called.set()
+            return True
+
+    runner = WaitsForLeaseLoss()
+    worker = DurableWorker(
+        job_repo,
+        runner,
+        retry_delays=[],
+        lease_seconds=1,
+        heartbeat_seconds=0.01,
+    )
+
+    assert worker.run_once() is True
+
+    restored = job_repo.get_job(queued_job["id"])
+    assert runner.calls == 1
+    assert restored["status"] == "running"
+    assert restored["steps"][0]["status"] == "running"
+    with job_repo.database.connection() as connection:
+        assert connection.execute("SELECT 1 FROM artifacts").fetchone() is None
     assert not any(
         thread.is_alive() and thread.name == f"durable-heartbeat-{worker.worker_id}"
         for thread in threading.enumerate()

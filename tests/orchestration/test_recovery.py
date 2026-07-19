@@ -76,6 +76,87 @@ def test_recovery_resets_retry_wait_step_inside_expired_running_job(job_repo):
     assert restored["steps"][0]["started_at"] is None
 
 
+def test_recovery_treats_running_job_with_null_lease_as_orphan(job_repo):
+    job = create_job(job_repo, "null-lease-orphan")
+    completed = insert_step(job_repo, job["id"], status="completed")
+    unfinished = insert_step(job_repo, job["id"], sequence=1, status="running")
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        worker_id="orphaned-worker",
+        lease_until=None,
+    )
+
+    assert job_repo.recover_expired_leases(NOW.isoformat()) == 1
+
+    restored = job_repo.get_job(job["id"])
+    statuses = {step["id"]: step["status"] for step in restored["steps"]}
+    assert restored["status"] == "queued"
+    assert restored["worker_id"] is restored["lease_until"] is None
+    assert statuses[completed] == "completed"
+    assert statuses[unfinished] == "queued"
+
+
+def test_recovery_finalizes_orphan_that_desires_cancelled(job_repo):
+    job = create_job(job_repo, "cancelled-orphan")
+    completed = insert_step(job_repo, job["id"], status="completed")
+    unfinished = insert_step(job_repo, job["id"], sequence=1, status="running")
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        desired_state="cancelled",
+        worker_id="orphaned-worker",
+        lease_until=None,
+        run_after=(NOW + timedelta(seconds=30)).isoformat(),
+    )
+
+    assert job_repo.recover_expired_leases(NOW.isoformat()) == 1
+
+    restored = job_repo.get_job(job["id"])
+    steps = {step["id"]: step for step in restored["steps"]}
+    assert restored["status"] == "cancelled"
+    assert restored["worker_id"] is restored["lease_until"] is None
+    assert restored["run_after"] is None
+    assert restored["finished_at"] is not None
+    assert steps[completed]["status"] == "completed"
+    assert steps[unfinished]["status"] == "cancelled"
+    assert steps[unfinished]["finished_at"] is not None
+
+
+def test_recovery_pauses_orphan_that_desires_paused(job_repo):
+    job = create_job(job_repo, "paused-orphan")
+    completed = insert_step(job_repo, job["id"], status="completed")
+    unfinished = insert_step(job_repo, job["id"], sequence=1, status="running")
+    with job_repo.database.transaction() as connection:
+        connection.execute(
+            "UPDATE job_steps SET started_at=? WHERE id=?",
+            ((NOW - timedelta(seconds=10)).isoformat(), unfinished),
+        )
+    set_job(
+        job_repo,
+        job["id"],
+        status="running",
+        desired_state="paused",
+        worker_id="orphaned-worker",
+        lease_until=(NOW - timedelta(seconds=1)).isoformat(),
+        run_after=(NOW + timedelta(seconds=30)).isoformat(),
+    )
+
+    assert job_repo.recover_expired_leases(NOW.isoformat()) == 1
+
+    restored = job_repo.get_job(job["id"])
+    steps = {step["id"]: step for step in restored["steps"]}
+    assert restored["status"] == "paused"
+    assert restored["worker_id"] is restored["lease_until"] is None
+    assert restored["run_after"] is None
+    assert restored["finished_at"] is None
+    assert steps[completed]["status"] == "completed"
+    assert steps[unfinished]["status"] == "queued"
+    assert steps[unfinished]["started_at"] is None
+
+
 def test_bootstrap_creation_activation_and_idempotency(job_repo):
     empty = create_job(job_repo, "empty-bootstrap")
 

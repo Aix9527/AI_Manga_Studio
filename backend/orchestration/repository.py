@@ -175,15 +175,16 @@ class JobRepository:
         if identities is None:
             raise ValueError("artifact checkpoint is no longer valid")
 
-        timestamp = utcnow()
         with self.database.transaction() as connection:
+            timestamp = utcnow()
             if expected_worker_id is not None:
                 owned = connection.execute(
                     """
                     SELECT 1 FROM jobs
                     WHERE id = ? AND status = 'running' AND worker_id = ?
+                      AND lease_until IS NOT NULL AND lease_until > ?
                     """,
-                    (job_id, expected_worker_id),
+                    (job_id, expected_worker_id, timestamp),
                 ).fetchone()
                 if owned is None:
                     raise LeaseOwnershipError(
@@ -249,6 +250,8 @@ class JobRepository:
         now: str,
         lease_until: str,
     ) -> dict[str, Any] | None:
+        if lease_until <= now:
+            raise ValueError("lease_until must be after now")
         claimed_id: str | None = None
         with self.database.transaction() as connection:
             row = connection.execute(
@@ -298,6 +301,8 @@ class JobRepository:
         now: str,
         lease_until: str,
     ) -> bool:
+        if lease_until <= now:
+            return False
         with self.database.transaction() as connection:
             changed = connection.execute(
                 """
@@ -315,8 +320,8 @@ class JobRepository:
             rows = connection.execute(
                 """
                 SELECT id FROM jobs
-                WHERE status = 'running' AND lease_until IS NOT NULL
-                  AND lease_until <= ?
+                WHERE status = 'running'
+                  AND (lease_until IS NULL OR lease_until <= ?)
                 ORDER BY created_at ASC, id ASC
                 """,
                 (now,),
@@ -336,12 +341,37 @@ class JobRepository:
             )
             connection.execute(
                 f"""
+                UPDATE job_steps
+                SET status = 'cancelled', finished_at = ?
+                WHERE job_id IN (
+                    SELECT id FROM jobs
+                    WHERE id IN ({placeholders}) AND desired_state = 'cancelled'
+                ) AND status NOT IN ('completed', 'cancelled')
+                """,
+                (now, *job_ids),
+            )
+            connection.execute(
+                f"""
                 UPDATE jobs
-                SET status = 'queued', worker_id = NULL, lease_until = NULL,
-                    run_after = NULL, message = ?, updated_at = ?
+                SET status = CASE desired_state
+                        WHEN 'cancelled' THEN 'cancelled'
+                        WHEN 'paused' THEN 'paused'
+                        ELSE 'queued'
+                    END,
+                    worker_id = NULL, lease_until = NULL, run_after = NULL,
+                    message = CASE desired_state
+                        WHEN 'cancelled' THEN '已从中断状态恢复并取消'
+                        WHEN 'paused' THEN '已从中断检查点恢复并暂停'
+                        ELSE '已从中断的检查点恢复'
+                    END,
+                    finished_at = CASE
+                        WHEN desired_state = 'cancelled' THEN ?
+                        ELSE NULL
+                    END,
+                    updated_at = ?
                 WHERE id IN ({placeholders}) AND status = 'running'
                 """,
-                ("已从中断的检查点恢复", now, *job_ids),
+                (now, now, *job_ids),
             )
             return len(job_ids)
 
@@ -358,12 +388,14 @@ class JobRepository:
         if max_retries < 0:
             raise ValueError("max_retries must be non-negative")
         with self.database.transaction() as connection:
+            timestamp = utcnow()
             job = connection.execute(
                 """
                 SELECT desired_state FROM jobs
                 WHERE id = ? AND status = 'running' AND worker_id = ?
+                  AND lease_until IS NOT NULL AND lease_until > ?
                 """,
-                (job_id, worker_id),
+                (job_id, worker_id, timestamp),
             ).fetchone()
             if job is None:
                 raise LeaseOwnershipError(
@@ -377,7 +409,6 @@ class JobRepository:
                 raise KeyError(f"step {step_id!r} does not belong to job {job_id!r}")
 
             if job["desired_state"] == "cancelled":
-                timestamp = utcnow()
                 connection.execute(
                     """
                     UPDATE job_steps SET status = 'cancelled', finished_at = ?
@@ -411,23 +442,43 @@ class JobRepository:
             connection.execute(
                 """
                 UPDATE job_steps
-                SET attempt = ?, status = ?, error_code = ?, error_message = ?
+                SET attempt = ?, status = ?, error_code = ?, error_message = ?,
+                    started_at = CASE
+                        WHEN ? = 'retry_wait' THEN NULL ELSE started_at
+                    END,
+                    finished_at = CASE
+                        WHEN ? = 'failed' THEN ? ELSE NULL
+                    END
                 WHERE id = ? AND job_id = ?
                 """,
-                (attempt, step_status, code, message, step_id, job_id),
+                (
+                    attempt,
+                    step_status,
+                    code,
+                    message,
+                    step_status,
+                    step_status,
+                    timestamp,
+                    step_id,
+                    job_id,
+                ),
             )
             connection.execute(
                 """
                 UPDATE jobs
                 SET status = ?, message = ?, run_after = ?, worker_id = NULL,
-                    lease_until = NULL, updated_at = ?
+                    lease_until = NULL,
+                    finished_at = CASE WHEN ? = 'failed' THEN ? ELSE NULL END,
+                    updated_at = ?
                 WHERE id = ? AND status = 'running' AND worker_id = ?
                 """,
                 (
                     job_status,
                     message,
                     effective_retry_at,
-                    utcnow(),
+                    job_status,
+                    timestamp,
+                    timestamp,
                     job_id,
                     worker_id,
                 ),
@@ -509,12 +560,14 @@ class JobRepository:
             expected_worker_id=worker_id,
         )
         with self.database.transaction() as connection:
+            timestamp = utcnow()
             job = connection.execute(
                 """
                 SELECT mode, desired_state FROM jobs
                 WHERE id = ? AND status = 'running' AND worker_id = ?
+                  AND lease_until IS NOT NULL AND lease_until > ?
                 """,
-                (job_id, worker_id),
+                (job_id, worker_id, timestamp),
             ).fetchone()
             if job is None:
                 raise LeaseOwnershipError(
@@ -527,7 +580,7 @@ class JobRepository:
                     UPDATE job_steps SET status = 'cancelled', finished_at = ?
                     WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')
                     """,
-                    (utcnow(), job_id),
+                    (timestamp, job_id),
                 )
             elif job["desired_state"] == "paused":
                 target = "paused"
@@ -535,7 +588,6 @@ class JobRepository:
                 target = "waiting_review"
             else:
                 target = "queued"
-            timestamp = utcnow()
             changed = connection.execute(
                 """
                 UPDATE jobs
@@ -562,13 +614,31 @@ class JobRepository:
                     f"worker {worker_id!r} no longer owns job {job_id!r}"
                 )
 
-    def ensure_bootstrap_step(self, job_id: str) -> str:
+    def ensure_bootstrap_step(
+        self,
+        job_id: str,
+        expected_worker_id: str | None = None,
+    ) -> str:
         with self.database.transaction() as connection:
+            timestamp = utcnow()
             exists = connection.execute(
                 "SELECT 1 FROM jobs WHERE id = ?", (job_id,)
             ).fetchone()
             if exists is None:
                 raise LookupError(f"job {job_id!r} does not exist")
+            if expected_worker_id is not None:
+                owned = connection.execute(
+                    """
+                    SELECT 1 FROM jobs
+                    WHERE id = ? AND status = 'running' AND worker_id = ?
+                      AND lease_until IS NOT NULL AND lease_until > ?
+                    """,
+                    (job_id, expected_worker_id, timestamp),
+                ).fetchone()
+                if owned is None:
+                    raise LeaseOwnershipError(
+                        f"worker {expected_worker_id!r} no longer owns job {job_id!r}"
+                    )
             rows = connection.execute(
                 """
                 SELECT id, status FROM job_steps
@@ -577,7 +647,6 @@ class JobRepository:
                 """,
                 (job_id,),
             ).fetchall()
-            timestamp = utcnow()
             if not rows:
                 step_id = str(uuid4())
                 connection.execute(
