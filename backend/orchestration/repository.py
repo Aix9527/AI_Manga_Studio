@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from backend.orchestration.checkpoints import (
     ArtifactDraft,
     matches_file_identity,
@@ -28,6 +30,14 @@ def rowdict(row: sqlite3.Row) -> dict[str, Any]:
 
 class LeaseOwnershipError(RuntimeError):
     """Raised when a worker tries to mutate a job it no longer owns."""
+
+
+class JobNotFoundError(LookupError):
+    """Raised when a durable command targets a job that does not exist."""
+
+
+class JobConflictError(RuntimeError):
+    """Raised when durable state does not permit a requested command."""
 
 
 class JobRepository:
@@ -147,6 +157,351 @@ class JobRepository:
                 (job_id, after_id),
             ).fetchall()
         return [rowdict(row) for row in rows]
+
+    def request_state(self, job_id: str, desired: str) -> dict[str, Any]:
+        if desired not in {"paused", "cancelled"}:
+            raise ValueError("unsupported desired state")
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                "SELECT status, desired_state FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if job is None:
+                raise JobNotFoundError(f"job {job_id!r} does not exist")
+            timestamp = utcnow()
+            if desired == "paused":
+                if job["status"] in {"completed", "cancelled", "failed"}:
+                    raise JobConflictError("job cannot be paused from its current state")
+                if job["status"] == "running":
+                    connection.execute(
+                        """
+                        UPDATE jobs SET desired_state='paused',
+                            message='当前步骤完成后暂停', updated_at=?
+                        WHERE id=?
+                        """,
+                        (timestamp, job_id),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        UPDATE jobs SET status='paused', desired_state='paused',
+                            message='已暂停', run_after=NULL, worker_id=NULL,
+                            lease_until=NULL, updated_at=?
+                        WHERE id=?
+                        """,
+                        (timestamp, job_id),
+                    )
+                self._append_event(connection, job_id, "job.pause", {})
+            else:
+                if job["status"] == "completed":
+                    raise JobConflictError("completed job cannot be cancelled")
+                if job["status"] != "cancelled":
+                    connection.execute(
+                        """
+                        UPDATE job_steps
+                        SET status='cancelled', finished_at=?
+                        WHERE job_id=? AND status NOT IN ('completed', 'cancelled')
+                        """,
+                        (timestamp, job_id),
+                    )
+                    connection.execute(
+                        """
+                        UPDATE jobs SET status='cancelled', desired_state='cancelled',
+                            message='已取消', run_after=NULL, worker_id=NULL,
+                            lease_until=NULL, finished_at=?, updated_at=?
+                        WHERE id=?
+                        """,
+                        (timestamp, timestamp, job_id),
+                    )
+                self._append_event(connection, job_id, "job.cancel", {})
+        return self.get_job(job_id)
+
+    def resume_job(self, job_id: str) -> dict[str, Any]:
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                "SELECT status, desired_state FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if job is None:
+                raise JobNotFoundError(f"job {job_id!r} does not exist")
+            timestamp = utcnow()
+            if job["status"] == "running" and job["desired_state"] == "paused":
+                connection.execute(
+                    """
+                    UPDATE jobs SET desired_state='running', message='继续执行',
+                        updated_at=? WHERE id=?
+                    """,
+                    (timestamp, job_id),
+                )
+            elif job["status"] in {"paused", "failed", "retry_wait"}:
+                connection.execute(
+                    """
+                    UPDATE job_steps
+                    SET status='queued', error_code='', error_message='',
+                        started_at=NULL, finished_at=NULL
+                    WHERE job_id=? AND status IN ('failed', 'retry_wait')
+                    """,
+                    (job_id,),
+                )
+                connection.execute(
+                    """
+                    UPDATE jobs SET status='queued', desired_state='running',
+                        message='继续执行', run_after=NULL, worker_id=NULL,
+                        lease_until=NULL, finished_at=NULL, updated_at=?
+                    WHERE id=?
+                    """,
+                    (timestamp, job_id),
+                )
+            else:
+                raise JobConflictError("job is not resumable")
+            self._append_event(connection, job_id, "job.resume", {})
+        return self.get_job(job_id)
+
+    def retry_failed_step(
+        self, job_id: str, step_id: str | None
+    ) -> dict[str, Any]:
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                "SELECT status FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if job is None:
+                raise JobNotFoundError(f"job {job_id!r} does not exist")
+            if job["status"] not in {"failed", "paused", "retry_wait"}:
+                raise JobConflictError("job is not in a retryable state")
+            if step_id is None:
+                step = connection.execute(
+                    """
+                    SELECT id FROM job_steps
+                    WHERE job_id=? AND status='failed'
+                    ORDER BY sequence, shot_id, id LIMIT 1
+                    """,
+                    (job_id,),
+                ).fetchone()
+            else:
+                step = connection.execute(
+                    """
+                    SELECT id FROM job_steps
+                    WHERE id=? AND job_id=? AND status='failed'
+                    """,
+                    (step_id, job_id),
+                ).fetchone()
+            if step is None:
+                raise JobConflictError("failed step not found")
+            target = str(step["id"])
+            self._reset_steps(connection, job_id, [target])
+            timestamp = utcnow()
+            connection.execute(
+                """
+                UPDATE jobs SET status='queued', desired_state='running',
+                    message='从故障步骤继续', final_video='', run_after=NULL,
+                    worker_id=NULL, lease_until=NULL, finished_at=NULL, updated_at=?
+                WHERE id=?
+                """,
+                (timestamp, job_id),
+            )
+            self._append_event(
+                connection, job_id, "job.retry", {"step_id": target}
+            )
+        return self.get_job(job_id)
+
+    def rollback_preview(self, job_id: str, step_id: str) -> list[str]:
+        with self.database.connection() as connection:
+            if connection.execute(
+                "SELECT 1 FROM jobs WHERE id=?", (job_id,)
+            ).fetchone() is None:
+                raise JobNotFoundError(f"job {job_id!r} does not exist")
+            return self._affected_step_ids(connection, job_id, step_id)
+
+    def rollback_steps(
+        self,
+        job_id: str,
+        step_id: str,
+        confirmed: list[str],
+    ) -> dict[str, Any]:
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                "SELECT status FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if job is None:
+                raise JobNotFoundError(f"job {job_id!r} does not exist")
+            if job["status"] in {"running", "completed", "cancelled"}:
+                raise JobConflictError("job cannot be rolled back from its current state")
+            affected = self._affected_step_ids(connection, job_id, step_id)
+            if confirmed != affected:
+                raise JobConflictError(
+                    "rollback confirmation does not match affected steps"
+                )
+            self._reset_steps(connection, job_id, affected)
+            timestamp = utcnow()
+            connection.execute(
+                """
+                UPDATE jobs SET status='queued', desired_state='running',
+                    message='已回退到指定步骤', final_video='', run_after=NULL,
+                    worker_id=NULL, lease_until=NULL, finished_at=NULL, updated_at=?
+                WHERE id=?
+                """,
+                (timestamp, job_id),
+            )
+            self._append_event(
+                connection,
+                job_id,
+                "job.rollback",
+                {"step_id": step_id, "affected_step_ids": affected},
+            )
+        return self.get_job(job_id)
+
+    def record_review(
+        self,
+        job_id: str,
+        step_id: str,
+        action: str,
+        comment: str,
+        patch: dict[str, Any],
+    ) -> dict[str, Any]:
+        if action == "rollback":
+            raise JobConflictError(
+                "use rollback preview and confirmation endpoint"
+            )
+        if action not in {"approve", "edit", "retry"}:
+            raise JobConflictError("unsupported review action")
+        with self.database.transaction() as connection:
+            job = connection.execute(
+                "SELECT status, settings_json FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if job is None:
+                raise JobNotFoundError(f"job {job_id!r} does not exist")
+            if job["status"] != "waiting_review":
+                raise JobConflictError("job is not waiting for review")
+            step = connection.execute(
+                "SELECT id FROM job_steps WHERE id=? AND job_id=?",
+                (step_id, job_id),
+            ).fetchone()
+            if step is None:
+                raise JobConflictError("review step does not belong to job")
+
+            if action == "edit":
+                allowed = {"shot_duration", "width", "height", "fps", "options"}
+                if set(patch) - allowed:
+                    raise JobConflictError("review patch contains read-only fields")
+                settings = json.loads(job["settings_json"])
+                for key in allowed - {"options"}:
+                    if key in patch:
+                        settings[key] = patch[key]
+                if "options" in patch:
+                    if not isinstance(patch["options"], dict):
+                        raise JobConflictError("options patch must be an object")
+                    settings.setdefault("options", {}).update(patch["options"])
+                try:
+                    validated = JobCreate.model_validate(settings)
+                except ValidationError as error:
+                    raise JobConflictError("review patch is invalid") from error
+                connection.execute(
+                    "UPDATE jobs SET settings_json=? WHERE id=?",
+                    (validated.model_dump_json(), job_id),
+                )
+
+            if action in {"edit", "retry"}:
+                affected = self._affected_step_ids(connection, job_id, step_id)
+                self._reset_steps(connection, job_id, affected)
+            timestamp = utcnow()
+            connection.execute(
+                """
+                INSERT INTO review_actions(
+                    id, job_id, step_id, action, comment, patch_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid4()),
+                    job_id,
+                    step_id,
+                    action,
+                    comment,
+                    json.dumps(patch, ensure_ascii=False, allow_nan=False),
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE jobs SET status='queued', desired_state='running',
+                    message='审核已处理', final_video='', run_after=NULL,
+                    worker_id=NULL, lease_until=NULL, finished_at=NULL, updated_at=?
+                WHERE id=?
+                """,
+                (timestamp, job_id),
+            )
+            self._append_event(
+                connection,
+                job_id,
+                f"job.review.{action}",
+                {"step_id": step_id},
+            )
+        return self.get_job(job_id)
+
+    @staticmethod
+    def _append_event(
+        connection: sqlite3.Connection,
+        job_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO job_events(job_id, event_type, payload_json, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                event_type,
+                json.dumps(payload, ensure_ascii=False, allow_nan=False),
+                utcnow(),
+            ),
+        )
+
+    @staticmethod
+    def _affected_step_ids(
+        connection: sqlite3.Connection, job_id: str, step_id: str
+    ) -> list[str]:
+        selected = connection.execute(
+            """
+            SELECT id, sequence, shot_id FROM job_steps
+            WHERE id=? AND job_id=?
+            """,
+            (step_id, job_id),
+        ).fetchone()
+        if selected is None:
+            raise JobConflictError("step does not belong to job")
+        rows = connection.execute(
+            """
+            SELECT id FROM job_steps
+            WHERE job_id=? AND sequence>?
+              AND (?='' OR shot_id=? OR shot_id='')
+            ORDER BY sequence, shot_id, id
+            """,
+            (job_id, selected["sequence"], selected["shot_id"], selected["shot_id"]),
+        ).fetchall()
+        return [str(selected["id"]), *(str(row["id"]) for row in rows)]
+
+    @staticmethod
+    def _reset_steps(
+        connection: sqlite3.Connection, job_id: str, step_ids: list[str]
+    ) -> None:
+        if not step_ids:
+            return
+        placeholders = ",".join("?" for _ in step_ids)
+        parameters = (job_id, *step_ids)
+        connection.execute(
+            f"""
+            UPDATE artifacts SET active=0
+            WHERE job_id=? AND step_id IN ({placeholders})
+            """,
+            parameters,
+        )
+        connection.execute(
+            f"""
+            UPDATE job_steps SET status='queued', progress=0, input_hash='',
+                error_code='', error_message='', started_at=NULL, finished_at=NULL
+            WHERE job_id=? AND id IN ({placeholders})
+            """,
+            parameters,
+        )
 
     def complete_step(
         self,
