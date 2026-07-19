@@ -205,8 +205,8 @@ class DurableWorker:
         return True
 
     def serve(self, poll_seconds: float = 0.5) -> None:
-        if poll_seconds <= 0:
-            raise ValueError("poll_seconds must be positive")
+        if not math.isfinite(poll_seconds) or poll_seconds <= 0:
+            raise ValueError("poll_seconds must be finite and positive")
         while not self._stop.is_set():
             try:
                 worked = self.run_once()

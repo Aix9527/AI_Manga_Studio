@@ -300,6 +300,30 @@ def test_serve_logs_unexpected_iteration_error_and_stops(
 
 
 @pytest.mark.parametrize(
+    "poll_seconds",
+    [float("nan"), float("inf"), float("-inf")],
+)
+def test_serve_rejects_nonfinite_poll_interval_without_running_jobs(
+    job_repo, monkeypatch, poll_seconds
+):
+    worker = DurableWorker(job_repo, AlwaysFails(job_repo), retry_delays=[])
+    calls = 0
+
+    def unexpected_run():
+        nonlocal calls
+        calls += 1
+        worker.stop()
+        return False
+
+    monkeypatch.setattr(worker, "run_once", unexpected_run)
+
+    with pytest.raises(ValueError, match="poll_seconds must be finite and positive"):
+        worker.serve(poll_seconds=poll_seconds)
+
+    assert calls == 0
+
+
+@pytest.mark.parametrize(
     ("mode", "desired_state", "expected"),
     [
         ("automatic", "running", "queued"),
