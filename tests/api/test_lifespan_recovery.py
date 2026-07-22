@@ -7,6 +7,7 @@ from backend.orchestration.checkpoints import ArtifactDraft
 from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.repository import JobRepository
 from backend.orchestration.schemas import JobCreate
+from backend.routes.jobs import router as jobs_router
 from backend.runtime.paths import RuntimePaths
 
 
@@ -104,6 +105,13 @@ def test_runtime_recovers_expired_running_job(job_repo, running_job, tmp_path):
 
 
 def test_formal_app_mounts_the_durable_jobs_router_once():
+    registrations = [
+        route
+        for route in app.routes
+        if getattr(route, 'original_router', None) is jobs_router
+    ]
+    assert len(registrations) == 1
+
     paths = app.openapi()['paths']
     assert set(paths['/api/jobs']) == {'post', 'get'}
     assert set(paths['/api/jobs/current']) == {'get'}
