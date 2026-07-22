@@ -14,6 +14,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Thread
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,12 +28,19 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from backend.config import load_config
 from backend.db import init_all_databases
 from backend.llm_service import get_llm_service, shutdown_llm_service
+from backend.orchestration.database import OrchestrationDatabase
+from backend.orchestration.repository import JobRepository, utcnow
+from backend.orchestration.service import JobService
+from backend.orchestration.worker import DurableWorker
+from backend.production.executor import ProductionStepRunner
 from backend.routes.project import router as project_router
 from backend.routes.generation import router as generation_router
 from backend.routes.monitor import router as monitor_router
 from backend.routes.shot import router as shot_router
 from backend.routes.pipeline import router as pipeline_router
 from backend.routes.llm import router as llm_router
+from backend.routes.jobs import router as jobs_router
+from backend.runtime.paths import RuntimePaths
 
 
 # ── Logging Setup ──────────────────────────────────────────
@@ -59,51 +67,69 @@ logger.add(
 
 # ── Application Lifespan ───────────────────────────────────
 
+
+def create_job_runtime(
+    config,
+    runner_factory=ProductionStepRunner,
+    runtime_paths: RuntimePaths | None = None,
+):
+    paths = runtime_paths or RuntimePaths.from_config(config, PROJECT_ROOT)
+    paths.ensure()
+    database = OrchestrationDatabase(paths.orchestration_database)
+    repository = JobRepository(database)
+    repository.recover_expired_leases(utcnow())
+    repository.reconcile_checkpoints()
+    runner = runner_factory(repository=repository)
+    worker = DurableWorker(
+        repository,
+        runner,
+        retry_delays=config.orchestration.retry_delays_seconds,
+        lease_seconds=config.orchestration.lease_seconds,
+        heartbeat_seconds=config.orchestration.heartbeat_seconds,
+    )
+    return repository, runner, worker
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup / shutdown lifecycle."""
-    # Startup
-    logger.info("=" * 60)
-    logger.info("  AI Manga Studio Pro V1.0 — Starting...")
-    logger.info("=" * 60)
-
-    # Load config
     config = load_config()
+    paths = RuntimePaths.from_config(config, PROJECT_ROOT)
+    repository, runner, worker = create_job_runtime(
+        config, runtime_paths=paths
+    )
     app.state.config = config
-    logger.info(f"Config loaded: {config.project.root_path}")
+    app.state.runtime_paths = paths
+    app.state.job_repository = repository
+    app.state.job_service = JobService(repository, runner)
+    app.state.sse_poll_seconds = config.orchestration.worker_poll_seconds
 
-    # Init database
     try:
         init_all_databases()
-        logger.info("Databases initialized (5 shards)")
-    except Exception as e:
-        logger.warning(f"Database init skipped: {e}")
+    except Exception as error:
+        logger.warning(f'Legacy database initialization skipped: {error}')
 
-    # Ensure output directories
-    for d in [
-        PROJECT_ROOT / "output",
-        PROJECT_ROOT / "cache",
-        PROJECT_ROOT / "project",
-        PROJECT_ROOT / "logs",
-    ]:
-        d.mkdir(parents=True, exist_ok=True)
+    worker_thread = Thread(
+        target=worker.serve,
+        kwargs={'poll_seconds': config.orchestration.worker_poll_seconds},
+        daemon=True,
+        name='durable-production-worker',
+    )
+    worker_thread.start()
 
-    # Init LLM Service
     try:
-        llm = get_llm_service()
-        llm_status = await llm.check_status()
-        logger.info(
-            f"LLM Service: provider={llm_status.provider.value}, "
-            f"available={llm_status.available}"
-        )
-    except Exception as e:
-        logger.warning(f"LLM Service init skipped: {e}")
-
-    logger.info("Server ready — http://127.0.0.1:8800")
-    yield
-    # Shutdown
-    await shutdown_llm_service()
-    logger.info("Server shutting down...")
+        try:
+            llm = get_llm_service()
+            llm_status = await llm.check_status()
+            logger.info(
+                f'LLM service: provider={llm_status.provider.value}, '
+                f'available={llm_status.available}'
+            )
+        except Exception as error:
+            logger.warning(f'LLM service unavailable: {error}')
+        yield
+    finally:
+        worker.stop()
+        worker_thread.join(timeout=5)
+        await shutdown_llm_service()
 
 
 # ── FastAPI Application ────────────────────────────────────
@@ -141,6 +167,7 @@ app.include_router(monitor_router, tags=["Monitor"])
 app.include_router(shot_router, tags=["Shots"])
 app.include_router(pipeline_router, tags=["Pipeline"])
 app.include_router(llm_router, tags=["LLM Service"])
+app.include_router(jobs_router)
 
 
 # ── Static Files (optional) ────────────────────────────────
