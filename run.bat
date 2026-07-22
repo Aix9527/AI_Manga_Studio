@@ -57,7 +57,7 @@ if !errorlevel! neq 0 (
 )
 
 :: Run pipeline
-python -u "%~dp0pipeline.py" "!NOVEL_PATH!" 2>&1
+python -u "%~dp0run.py" --novel "!NOVEL_PATH!"
 
 echo.
 echo   ══════════════════════════════════════════════

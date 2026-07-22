@@ -20,10 +20,14 @@ Quick start:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+import uuid
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
@@ -213,57 +217,97 @@ def wait_for_service(url: str, max_wait: int = 60, name: str = "Service") -> boo
     return False
 
 
-def run_pipeline(novel_path: str, style: str = None, config: str = None):
-    """Run the novel-to-video pipeline."""
-    novel_file = Path(novel_path)
-    if not novel_file.exists():
-        print(f"  [ERROR] Novel not found: {novel_path}")
-        print(f"  Available novels:")
-        if NOVELS_DIR.exists():
-            for f in NOVELS_DIR.glob("*.txt"):
-                print(f"    - {f.name}")
-        root_novels = list(PROJECT_ROOT.glob("*.txt"))
-        for f in root_novels:
-            print(f"    - {f.name}")
-        return None
+def api_json_request(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    *,
+    base_url: str = f'http://{BACKEND_HOST}:{BACKEND_PORT}',
+    opener=None,
+) -> dict | None:
+    opener = opener or urllib.request.urlopen
+    data = None if payload is None else json.dumps(payload).encode('utf-8')
+    request = urllib.request.Request(
+        f'{base_url}{path}',
+        data=data,
+        method=method,
+        headers={'Content-Type': 'application/json'},
+    )
+    try:
+        with opener(request, timeout=10) as response:
+            body = response.read()
+    except (urllib.error.URLError, TimeoutError) as error:
+        raise RuntimeError(f'本地服务不可用：{error}') from error
+    return json.loads(body) if body else None
 
-    print(f"\n{'='*60}")
-    print(f"  Pipeline: Novel -> AI Manga Video")
-    print(f"  Novel: {novel_file.name}")
-    print(f"{'='*60}")
 
-    pipeline_script = PROJECT_ROOT / "pipeline.py"
+def submit_job(
+    novel_path: str | Path,
+    style: str | None = None,
+    *,
+    base_url: str = f'http://{BACKEND_HOST}:{BACKEND_PORT}',
+    opener=None,
+) -> dict:
+    novel = Path(novel_path).resolve()
+    if not novel.is_file():
+        raise FileNotFoundError(f'输入文件不存在：{novel}')
+    return api_json_request(
+        'POST',
+        '/api/jobs',
+        {
+            'project_id': novel.stem,
+            'input_path': str(novel),
+            'input_type': 'novel',
+            'mode': 'automatic',
+            'shot_duration': 5,
+            'width': 1080,
+            'height': 1920,
+            'fps': 24,
+            'options': {'style': style or 'realistic'},
+            'idempotency_key': f'cli-{uuid.uuid4()}',
+        },
+        base_url=base_url,
+        opener=opener,
+    )
 
-    if not pipeline_script.exists():
-        print("  [ERROR] pipeline.py not found at project root!")
-        return None
 
-    # Check ComfyUI
-    if not is_port_in_use(COMFYUI_PORT):
-        print("\n  [WARNING] ComfyUI is not running on :8188")
-        print("  Image/video generation will fail.")
-        print("  Start ComfyUI first or use: python run.py --comfyui")
+def monitor_job(job_id: str, poll_seconds: float = 1.0) -> int:
+    last = None
+    while True:
+        job = api_json_request('GET', f'/api/jobs/{job_id}')
+        snapshot = (job['status'], job['progress'], job['message'])
+        if snapshot != last:
+            print(
+                '  [{}] {:.0%} {}'.format(
+                    job['status'], job['progress'], job['message']
+                )
+            )
+            last = snapshot
+        if job['status'] == 'completed':
+            return 0
+        if job['status'] in {'failed', 'cancelled'}:
+            return 1
+        time.sleep(poll_seconds)
 
-    # Check backend
-    if not is_port_in_use(BACKEND_PORT):
-        print("\n  [WARNING] Backend not running on :8800")
-        print("  Some features need the API server.")
 
-    print("\n  Launching pipeline...")
-    print(f"  Output will be in: {OUTPUT_DIR}")
-    print()
-
-    cmd = [sys.executable, str(pipeline_script), str(novel_file)]
-    # FIX: Pass the correct backend API URL
-    cmd.extend(["--api", f"http://{BACKEND_HOST}:{BACKEND_PORT}"])
-
-    if style:
-        cmd.extend(["--style", style])
+def run_pipeline(
+    novel_path: str,
+    style: str | None = None,
+    config: str | None = None,
+):
     if config:
-        cmd.extend(["--config", config])
-
-    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
-    return result
+        raise ValueError('The canonical durable API does not accept legacy config files')
+    if not is_port_in_use(BACKEND_PORT):
+        start_backend()
+        if not wait_for_service(
+            f'http://{BACKEND_HOST}:{BACKEND_PORT}/health',
+            max_wait=30,
+            name='Backend',
+        ):
+            raise RuntimeError('本地后端启动失败')
+    job = submit_job(novel_path, style=style)
+    print('  Durable job created: {}'.format(job['id']))
+    return monitor_job(job['id'])
 
 
 def interactive_menu():
@@ -395,8 +439,6 @@ Examples:
   python run.py --web                        Start web services
   python run.py --all novels/my_novel.txt    Web + pipeline
   python run.py --comfyui                    Start ComfyUI only
-  python orchestrator.py --novel novel.txt   Orchestrator: 15-step pipeline
-  python orchestrator.py --resume            Resume interrupted pipeline
         """
     )
 

@@ -1,0 +1,29 @@
+schema_version: 1
+canonical:
+  cli: "run.py"
+  api: "backend.main:app"
+  job_api: "/api/jobs"
+  project_api: "/api/projects"
+compatibility:
+  - path: "backend/routes/pipeline.py"
+    status: "durable_facade"
+  - path: "一键启动.bat"
+    status: "forwards_to_canonical_cli"
+  - path: "run.bat"
+    status: "forwards_to_canonical_cli"
+reference_only:
+  - {path: "backend_v3", status: "reference_only"}
+  - {path: "backend_v4", status: "reference_only"}
+  - {path: "backend_v6", status: "reference_only"}
+  - {path: "backend_v7", status: "reference_only"}
+  - {path: "backend_v10", status: "reference_only"}
+  - {path: "backend_v11", status: "reference_only"}
+  - {path: "pipeline.py", status: "reference_only"}
+  - {path: "orchestrator.py", status: "reference_only"}
+  - {path: "pipeline.bat", status: "reference_only"}
+  - {path: "run_v7.bat", status: "reference_only"}
+  - {path: "start_v4.bat", status: "reference_only"}
+  - {path: "start_v6.bat", status: "reference_only"}
+policy:
+  delete_legacy_files: false
+  allow_placeholder_success: false
