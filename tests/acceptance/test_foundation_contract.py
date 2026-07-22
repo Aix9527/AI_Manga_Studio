@@ -1,22 +1,12 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from backend.main import create_job_runtime
+import backend.main as backend_main
 from backend.orchestration.schemas import JobCreate
+from backend.production.executor import ProductionStepRunner
 from backend.projects.repository import ProjectRepository
 from backend.projects.schemas import ProjectCreate, SourceCreate
 from backend.runtime.paths import RuntimePaths
-
-
-class IdleRunner:
-    def __init__(self, repository):
-        self.repository = repository
-
-    def run_next(self, job, cancel_requested):
-        return None
-
-    def cancel(self, job_id):
-        return False
 
 
 def test_one_database_restores_job_project_and_source(tmp_path):
@@ -40,9 +30,10 @@ def test_one_database_restores_job_project_and_source(tmp_path):
         cache_dir=tmp_path / "cache",
         temp_dir=tmp_path / "temp",
     )
-    job_repository, _, _ = create_job_runtime(
-        config, runner_factory=IdleRunner, runtime_paths=paths
+    job_repository, runner, worker = backend_main.create_job_runtime(
+        config, runtime_paths=paths
     )
+    assert isinstance(runner, ProductionStepRunner)
     project_repository = ProjectRepository(job_repository.database)
     project = project_repository.create(ProjectCreate(name="统一底座验收"))
     project_repository.add_source(
@@ -62,19 +53,43 @@ def test_one_database_restores_job_project_and_source(tmp_path):
             idempotency_key="acceptance-job-0001",
         )
     )
+    assert worker.run_once() is True
 
-    reopened_jobs, _, _ = create_job_runtime(
-        config, runner_factory=IdleRunner, runtime_paths=paths
+    failed_closed = job_repository.get_job(job["id"])
+    assert failed_closed["status"] == "retry_wait"
+    assert failed_closed["steps"][0]["error_code"] == "PIPELINE_NOT_READY"
+
+    reopened_jobs, _, _ = backend_main.create_job_runtime(
+        config, runtime_paths=paths
     )
     reopened_projects = ProjectRepository(reopened_jobs.database)
+    reopened_job = reopened_jobs.get_job(job["id"])
 
-    assert reopened_jobs.get_job(job["id"])["status"] == "queued"
+    assert reopened_job["status"] == "retry_wait"
+    assert reopened_job["steps"][0]["error_code"] == "PIPELINE_NOT_READY"
     assert reopened_projects.get(project["id"])["sources"][0]["kind"] == "idea"
-    assert not list(tmp_path.rglob("*.mp4"))
+    media_extensions = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".gif",
+        ".wav",
+        ".mp3",
+        ".m4a",
+        ".mp4",
+        ".mov",
+        ".mkv",
+    }
+    assert not [
+        path
+        for path in tmp_path.rglob("*")
+        if path.is_file() and path.suffix.lower() in media_extensions
+    ]
 
 
 def test_reference_directories_are_not_part_of_the_formal_backend():
-    main_source = Path("backend/main.py").read_text(encoding="utf-8")
+    main_source = Path(backend_main.__file__).read_text(encoding="utf-8")
     for legacy in (
         "backend_v3",
         "backend_v4",
