@@ -33,6 +33,8 @@ from backend.orchestration.repository import JobRepository, utcnow
 from backend.orchestration.service import JobService
 from backend.orchestration.worker import DurableWorker
 from backend.production.executor import ProductionStepRunner
+from backend.projects.repository import ProjectRepository
+from backend.projects.service import ProjectService
 from backend.routes.project import router as project_router
 from backend.routes.generation import router as generation_router
 from backend.routes.monitor import router as monitor_router
@@ -95,6 +97,9 @@ async def lifespan(app: FastAPI):
     paths = RuntimePaths.from_config(config, PROJECT_ROOT)
     repository, runner, worker = create_job_runtime(
         config, runtime_paths=paths
+    )
+    app.state.project_service = ProjectService(
+        ProjectRepository(repository.database)
     )
     app.state.config = config
     app.state.runtime_paths = paths
