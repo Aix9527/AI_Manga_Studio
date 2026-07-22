@@ -236,9 +236,32 @@ def api_json_request(
     try:
         with opener(request, timeout=10) as response:
             body = response.read()
+    except urllib.error.HTTPError as error:
+        body = error.read() if error.fp is not None else b''
+        detail = error.reason
+        if body:
+            try:
+                error_payload = json.loads(body)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                detail = body.decode('utf-8', errors='replace')
+            else:
+                if isinstance(error_payload, dict) and 'detail' in error_payload:
+                    detail = error_payload['detail']
+                else:
+                    detail = error_payload
+        if not isinstance(detail, str):
+            detail = json.dumps(detail, ensure_ascii=False)
+        raise RuntimeError(
+            f'本地 API 请求失败（HTTP {error.code}）：{detail}'
+        ) from error
     except (urllib.error.URLError, TimeoutError) as error:
         raise RuntimeError(f'本地服务不可用：{error}') from error
-    return json.loads(body) if body else None
+    if not body:
+        return None
+    try:
+        return json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise RuntimeError(f'本地 API 响应不是有效 JSON：{error}') from error
 
 
 def submit_job(
@@ -428,7 +451,7 @@ def start_web_services(with_comfyui=False):
     return backend_proc, frontend_proc
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="AI Manga Studio - One-Click Launcher & Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -457,7 +480,7 @@ Examples:
     # --check mode
     if args.check:
         check_environment()
-        return
+        return 0
 
     # --comfyui mode
     if args.comfyui and not args.web and not args.novel and not args.all:
@@ -468,7 +491,7 @@ Examples:
                 time.sleep(1)
         except KeyboardInterrupt:
             print("\n  Shutting down...")
-        return
+        return 0
 
     # --web mode: start services and stay alive
     if args.web and not args.all:
@@ -479,13 +502,15 @@ Examples:
                 time.sleep(1)
         except KeyboardInterrupt:
             print("\n  Shutting down...")
-        return
+        return 0
 
     # --all mode: start web + run pipeline
     if args.all:
         start_web_services(with_comfyui=args.comfyui)
         time.sleep(5)
-        run_pipeline(args.all, style=args.style, config=args.config)
+        result = run_pipeline(args.all, style=args.style, config=args.config)
+        if result:
+            return result
         print("\n  Pipeline complete! Web services still running.")
         print("  Press Ctrl+C to stop.")
         try:
@@ -493,19 +518,19 @@ Examples:
                 time.sleep(1)
         except KeyboardInterrupt:
             print("\n  Shutting down...")
-        return
+        return 0
 
     # --novel mode: direct pipeline
     if args.novel:
         if args.comfyui:
             start_comfyui()
             time.sleep(3)
-        run_pipeline(args.novel, style=args.style, config=args.config)
-        return
+        return run_pipeline(args.novel, style=args.style, config=args.config)
 
     # Default: interactive menu
     interactive_menu()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

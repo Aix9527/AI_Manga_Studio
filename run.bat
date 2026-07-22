@@ -58,6 +58,12 @@ if !errorlevel! neq 0 (
 
 :: Run pipeline
 python -u "%~dp0run.py" --novel "!NOVEL_PATH!"
+set "PIPELINE_EXIT=%ERRORLEVEL%"
+if not "%PIPELINE_EXIT%"=="0" (
+    echo.
+    echo   [ERROR] Pipeline failed with exit code %PIPELINE_EXIT%.
+    exit /b %PIPELINE_EXIT%
+)
 
 echo.
 echo   ══════════════════════════════════════════════

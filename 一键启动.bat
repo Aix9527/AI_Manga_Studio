@@ -200,6 +200,12 @@ if !errorlevel! neq 0 (
 echo.
 echo   Launching pipeline...
 python -u "%~dp0run.py" --novel "!NOVEL_PATH!"
+set "PIPELINE_EXIT=%ERRORLEVEL%"
+if not "%PIPELINE_EXIT%"=="0" (
+    echo.
+    echo   [ERROR] Pipeline 失败，退出码: %PIPELINE_EXIT%
+    exit /b %PIPELINE_EXIT%
+)
 
 echo.
 echo   ══════════════════════════════════════════════

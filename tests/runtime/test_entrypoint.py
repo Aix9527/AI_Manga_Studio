@@ -1,4 +1,6 @@
+import io
 import json
+import sys
 import urllib.error
 import uuid
 from pathlib import Path
@@ -35,6 +37,20 @@ class FakeResponse:
 
     def read(self):
         return json.dumps(self.payload).encode("utf-8")
+
+
+class RawResponse:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return self.body
 
 
 def test_submit_job_posts_complete_payload_to_durable_api(tmp_path):
@@ -108,6 +124,48 @@ def test_api_json_request_translates_local_connection_errors(error):
         run.api_json_request("GET", "/api/jobs/job-1", opener=opener)
 
 
+@pytest.mark.parametrize(
+    ('status', 'detail'),
+    [
+        (422, 'invalid job request'),
+        (404, 'job not found'),
+        (409, 'idempotency conflict'),
+    ],
+)
+def test_api_json_request_preserves_http_status_and_detail(status, detail):
+    def opener(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            status,
+            detail,
+            hdrs=None,
+            fp=io.BytesIO(json.dumps({'detail': detail}).encode('utf-8')),
+        )
+
+    with pytest.raises(RuntimeError) as caught:
+        run.api_json_request('POST', '/api/jobs', {}, opener=opener)
+
+    message = str(caught.value)
+    assert f'HTTP {status}' in message
+    assert detail in message
+    assert '服务不可用' not in message
+
+
+def test_api_json_request_rejects_malformed_json_response():
+    def opener(request, timeout):
+        return RawResponse(b'{not-json')
+
+    with pytest.raises(RuntimeError, match='本地 API 响应不是有效 JSON'):
+        run.api_json_request('GET', '/api/jobs/job-1', opener=opener)
+
+
+def test_api_json_request_allows_an_empty_response():
+    def opener(request, timeout):
+        return RawResponse(b'')
+
+    assert run.api_json_request('GET', '/api/jobs/job-1', opener=opener) is None
+
+
 def test_monitor_job_polls_until_completed(monkeypatch):
     jobs = iter(
         [
@@ -142,6 +200,38 @@ def test_monitor_job_returns_failure_for_unsuccessful_terminal_status(monkeypatc
     assert run.monitor_job("job-1", poll_seconds=0) == 1
 
 
+@pytest.mark.parametrize('terminal_result', [0, 1])
+def test_main_returns_the_novel_pipeline_terminal_result(monkeypatch, terminal_result):
+    monkeypatch.setattr(sys, 'argv', ['run.py', '--novel', 'story.txt'])
+    monkeypatch.setattr(run, 'print_banner', lambda: None)
+    monkeypatch.setattr(
+        run,
+        'run_pipeline',
+        lambda *_args, **_kwargs: terminal_result,
+    )
+
+    assert run.main() == terminal_result
+
+
+def test_all_mode_returns_immediately_when_the_pipeline_fails(monkeypatch):
+    def sleep(seconds):
+        if seconds != 5:
+            raise AssertionError('failed durable job must not enter the service wait loop')
+
+    monkeypatch.setattr(sys, 'argv', ['run.py', '--all', 'story.txt'])
+    monkeypatch.setattr(run, 'print_banner', lambda: None)
+    monkeypatch.setattr(run, 'start_web_services', lambda **_kwargs: None)
+    monkeypatch.setattr(run.time, 'sleep', sleep)
+    monkeypatch.setattr(run, 'run_pipeline', lambda *_args, **_kwargs: 1)
+
+    assert run.main() == 1
+
+
+def test_module_entrypoint_exits_with_main_result():
+    source = Path(run.__file__).read_text(encoding='utf-8')
+    assert 'raise SystemExit(main())' in source
+
+
 def test_formal_launcher_source_does_not_spawn_historical_pipeline():
     source = Path(run.__file__).read_text(encoding="utf-8")
     assert 'PROJECT_ROOT / "pipeline.py"' not in source
@@ -150,6 +240,31 @@ def test_formal_launcher_source_does_not_spawn_historical_pipeline():
         batch_source = launcher.read_text(encoding="utf-8")
         assert "pipeline.py" not in batch_source
         assert 'python -u "%~dp0run.py" --novel "!NOVEL_PATH!"' in batch_source
+
+
+@pytest.mark.parametrize(
+    ('launcher', 'success_text'),
+    [
+        (Path('一键启动.bat'), 'Pipeline 完成!'),
+        (Path('run.bat'), 'Done! Output in: output'),
+    ],
+)
+def test_batch_launcher_exits_on_failure_before_printing_success(
+    launcher,
+    success_text,
+):
+    lines = launcher.read_text(encoding='utf-8').splitlines()
+    command = 'python -u "%~dp0run.py" --novel "!NOVEL_PATH!"'
+    command_index = lines.index(command)
+    capture = 'set "PIPELINE_EXIT=%ERRORLEVEL%"'
+
+    assert lines[command_index + 1] == capture
+    failure_index = lines.index('if not "%PIPELINE_EXIT%"=="0" (')
+    exit_index = lines.index('    exit /b %PIPELINE_EXIT%')
+    success_index = next(
+        index for index, line in enumerate(lines) if success_text in line
+    )
+    assert command_index < failure_index < exit_index < success_index
 
 
 def test_entrypoint_manifest_encodes_the_exact_launcher_policy():
@@ -191,4 +306,9 @@ def test_entrypoint_manifest_encodes_the_exact_launcher_policy():
 
 
 def test_readme_states_the_exact_fail_closed_foundation_milestone():
-    assert Path("README.md").read_text(encoding="utf-8") == EXPECTED_README
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert readme == EXPECTED_README
+    assert all(
+        marker not in readme
+        for marker in ('姝ｅ紡', '杩愯', '鍏ュ彛', '锛歚')
+    )
