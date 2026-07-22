@@ -2,6 +2,18 @@
 # AI Manga Studio Pro V1.0 — Global Configuration
 # ============================================================
 
+runtime:
+  data_root: "."
+  local_only: true
+
+orchestration:
+  database_path: "database/orchestration.db"
+  worker_poll_seconds: 0.5
+  lease_seconds: 30
+  heartbeat_seconds: 10
+  max_retries: 3
+  retry_delays_seconds: [5, 15, 45]
+
 project:
   name: "AI Manga Studio Pro"
   version: "1.0.0"

@@ -233,7 +233,7 @@ def test_app_config_has_repository_relative_orchestration_database():
         / "orchestration.db"
     )
 
-    assert Path(orchestration.database_path) == expected
+    assert orchestration.database_path == 'database/orchestration.db'
     assert orchestration.worker_poll_seconds == 0.5
     assert orchestration.lease_seconds == 30
     assert orchestration.heartbeat_seconds == 10

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -128,9 +128,14 @@ class SchedulerConfig(BaseModel):
     queue_poll_interval: float = 2.0
 
 
+class RuntimeConfig(BaseModel):
+    data_root: str = "."
+    local_only: Literal[True] = True
+
+
 class OrchestrationConfig(BaseModel):
     database_path: str = Field(
-        default=str(PROJECT_ROOT / "database" / "orchestration.db"),
+        default="database/orchestration.db",
         min_length=1,
     )
     worker_poll_seconds: float = Field(default=0.5, gt=0)
@@ -217,6 +222,7 @@ class GenerationConfig(BaseModel):
 
 class AppConfig(BaseModel):
     """Root configuration aggregating all sub-sections."""
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     comfyui: ComfyUIConfig = Field(default_factory=ComfyUIConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
