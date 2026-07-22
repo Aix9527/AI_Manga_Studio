@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import datetime
@@ -51,6 +52,47 @@ def _safe_project_id(path: Path) -> str:
     return (value or f'legacy-{uuid.uuid4().hex[:8]}')[:128]
 
 
+def _safe_upload_stem(filename: str) -> str:
+    value = re.sub(r'[<>:\x22/\\|?*\x00-\x1f]', '_', Path(filename).stem)
+    return value.strip(' .')[:128] or 'upload'
+
+
+def _store_upload(filename: str, content: bytes) -> tuple[Path, bool]:
+    digest = hashlib.sha256(content).hexdigest()
+    managed_path = (
+        NOVELS_DIR / f'{_safe_upload_stem(filename)}-{digest}.txt'
+    ).resolve()
+    if NOVELS_DIR.resolve() not in managed_path.parents:
+        raise HTTPException(status_code=400, detail='Unsafe file name')
+    try:
+        with managed_path.open('xb') as destination:
+            destination.write(content)
+        return managed_path, True
+    except FileExistsError:
+        if not managed_path.is_file() or managed_path.read_bytes() != content:
+            raise HTTPException(
+                status_code=409, detail='Managed upload path contains different content'
+            )
+        return managed_path, False
+
+
+def _remove_unreferenced_upload(request: Request, managed_path: Path) -> None:
+    repository = _service(request).repository
+    with repository.database.connection() as connection:
+        referenced = connection.execute(
+            'SELECT 1 FROM jobs WHERE input_path=? LIMIT 1', (str(managed_path),)
+        ).fetchone()
+    if referenced is None and managed_path.is_file():
+        managed_path.unlink()
+
+
+def _create_legacy_job(request: Request, command: JobCreate) -> dict:
+    try:
+        return _service(request).create(command)
+    except JobConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 def _command(body: PipelineRunRequest, idempotency_key: str) -> JobCreate:
     novel_path = Path(body.novel_path).resolve()
     if not novel_path.is_file():
@@ -97,10 +139,12 @@ def _legacy_view(job: dict) -> dict:
 def run_pipeline(
     body: PipelineRunRequest,
     request: Request,
-    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    idempotency_key: str | None = Header(
+        default=None, alias='Idempotency-Key', min_length=8, max_length=128
+    ),
 ):
     key = idempotency_key or f'legacy-{uuid.uuid4()}'
-    return _legacy_view(_service(request).create(_command(body, key)))
+    return _legacy_view(_create_legacy_job(request, _command(body, key)))
 
 
 @router.post('/upload')
@@ -108,18 +152,23 @@ async def upload_and_run(
     request: Request,
     file: UploadFile = File(...),
     style: str | None = Form(default=None),
-    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    idempotency_key: str | None = Header(
+        default=None, alias='Idempotency-Key', min_length=8, max_length=128
+    ),
 ):
     safe_name = Path(file.filename or '').name
     if not safe_name.lower().endswith('.txt'):
         raise HTTPException(status_code=400, detail='Only .txt files accepted')
-    novel_path = (NOVELS_DIR / safe_name).resolve()
-    if NOVELS_DIR.resolve() not in novel_path.parents:
-        raise HTTPException(status_code=400, detail='Unsafe file name')
-    novel_path.write_bytes(await file.read())
+    novel_path, created = _store_upload(safe_name, await file.read())
     body = PipelineRunRequest(novel_path=str(novel_path), style=style)
     key = idempotency_key or f'legacy-upload-{uuid.uuid4()}'
-    return _legacy_view(_service(request).create(_command(body, key)))
+    try:
+        job = _create_legacy_job(request, _command(body, key))
+    except HTTPException as error:
+        if error.status_code == 409 and created:
+            _remove_unreferenced_upload(request, novel_path)
+        raise
+    return _legacy_view(job)
 
 
 @router.get('/status/{job_id}')
@@ -151,7 +200,9 @@ def list_novels():
 def cancel_job(
     job_id: str,
     request: Request,
-    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    idempotency_key: str | None = Header(
+        default=None, alias='Idempotency-Key', min_length=8, max_length=128
+    ),
 ):
     try:
         job = _service(request).cancel(
