@@ -57,7 +57,7 @@ def _safe_upload_stem(filename: str) -> str:
     return value.strip(' .')[:128] or 'upload'
 
 
-def _store_upload(filename: str, content: bytes) -> tuple[Path, bool]:
+def _store_upload(filename: str, content: bytes) -> Path:
     digest = hashlib.sha256(content).hexdigest()
     managed_path = (
         NOVELS_DIR / f'{_safe_upload_stem(filename)}-{digest}.txt'
@@ -67,23 +67,13 @@ def _store_upload(filename: str, content: bytes) -> tuple[Path, bool]:
     try:
         with managed_path.open('xb') as destination:
             destination.write(content)
-        return managed_path, True
+        return managed_path
     except FileExistsError:
         if not managed_path.is_file() or managed_path.read_bytes() != content:
             raise HTTPException(
                 status_code=409, detail='Managed upload path contains different content'
             )
-        return managed_path, False
-
-
-def _remove_unreferenced_upload(request: Request, managed_path: Path) -> None:
-    repository = _service(request).repository
-    with repository.database.connection() as connection:
-        referenced = connection.execute(
-            'SELECT 1 FROM jobs WHERE input_path=? LIMIT 1', (str(managed_path),)
-        ).fetchone()
-    if referenced is None and managed_path.is_file():
-        managed_path.unlink()
+        return managed_path
 
 
 def _create_legacy_job(request: Request, command: JobCreate) -> dict:
@@ -159,16 +149,10 @@ async def upload_and_run(
     safe_name = Path(file.filename or '').name
     if not safe_name.lower().endswith('.txt'):
         raise HTTPException(status_code=400, detail='Only .txt files accepted')
-    novel_path, created = _store_upload(safe_name, await file.read())
+    novel_path = _store_upload(safe_name, await file.read())
     body = PipelineRunRequest(novel_path=str(novel_path), style=style)
     key = idempotency_key or f'legacy-upload-{uuid.uuid4()}'
-    try:
-        job = _create_legacy_job(request, _command(body, key))
-    except HTTPException as error:
-        if error.status_code == 409 and created:
-            _remove_unreferenced_upload(request, novel_path)
-        raise
-    return _legacy_view(job)
+    return _legacy_view(_create_legacy_job(request, _command(body, key)))
 
 
 @router.get('/status/{job_id}')

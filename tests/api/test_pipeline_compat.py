@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -138,7 +139,7 @@ def test_legacy_upload_identical_replay_does_not_mutate_managed_input(
     assert (managed.read_bytes(), managed.stat().st_mtime_ns) == before
 
 
-def test_legacy_upload_conflicting_replay_returns_409_and_cleans_new_input(
+def test_legacy_upload_conflicting_replay_retains_and_reuses_new_input(
     tmp_path, monkeypatch
 ):
     novels = tmp_path / 'novels'
@@ -150,11 +151,39 @@ def test_legacy_upload_conflicting_replay_returns_409_and_cleans_new_input(
 
     first = upload(client, 'immutable-conflict-0001', b'accepted input')
     accepted = Path(repository.get_job(first.json()['job_id'])['settings']['input_path'])
-    conflict = upload(client, 'immutable-conflict-0001', b'conflicting input')
+    retained_bytes = b'conflicting input'
+    retained = novels / (
+        'story-' + hashlib.sha256(retained_bytes).hexdigest() + '.txt'
+    )
+    conflict = upload(client, 'immutable-conflict-0001', retained_bytes)
 
     assert conflict.status_code == 409
+    assert retained.read_bytes() == retained_bytes
+    reused = upload(client, 'immutable-reuse-0001', retained_bytes)
+    assert reused.status_code == 200
     assert accepted.read_bytes() == b'accepted input'
-    assert list(novels.iterdir()) == [accepted]
+    assert (
+        repository.get_job(reused.json()['job_id'])['settings']['input_path']
+        == str(retained)
+    )
+
+
+def test_legacy_upload_conflict_never_unlinks_content_addressed_input(
+    tmp_path, monkeypatch
+):
+    novels = tmp_path / 'novels'
+    novels.mkdir()
+    monkeypatch.setattr(pipeline, 'NOVELS_DIR', novels)
+    client, _ = make_client(tmp_path / 'jobs.db', raise_server_exceptions=False)
+    assert upload(client, 'immutable-no-unlink-0001', b'accepted').status_code == 200
+
+    def fail_unlink(_path, *args, **kwargs):
+        raise AssertionError('upload conflict attempted deletion')
+
+    monkeypatch.setattr(Path, 'unlink', fail_unlink)
+    conflict = upload(client, 'immutable-no-unlink-0001', b'conflicting')
+
+    assert conflict.status_code == 409
 
 
 def test_legacy_run_conflicting_replay_returns_409(tmp_path):
