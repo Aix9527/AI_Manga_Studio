@@ -18,10 +18,11 @@ class PlatformModuleApi:
     _session_factory: async_sessionmaker
 
     async def startup(self) -> None:
-        await self._database.startup()
+        if not self._database.initialized:
+            await self._database.init()
 
     async def shutdown(self) -> None:
-        await self._database.shutdown()
+        await self._database.close()
 
     async def health(self) -> dict[str, Any]:
         db_ok = await self._database.ping()

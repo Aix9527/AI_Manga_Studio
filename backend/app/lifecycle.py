@@ -5,22 +5,28 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from backend.app.container import ApplicationContainer
+from backend.app.container_builder import build_container
+from backend.modules.platform.infrastructure.database import DatabaseManager
+from backend.modules.platform.infrastructure.settings import AppSettings
 
 
-def create_lifespan(container: ApplicationContainer):
+def create_lifespan(
+    settings: AppSettings,
+    database_manager: DatabaseManager,
+):
     """Create a FastAPI lifespan context manager."""
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
-        await container.platform.startup()
-        await container.workflows.recover_expired_leases()
-        await container.workflows.start_workers()
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await database_manager.init()
+        container = await build_container(settings, database_manager)
+        app.state.container = container
 
         try:
             yield
         finally:
-            await container.workflows.stop_workers()
-            await container.platform.shutdown()
+            # Worker supervision is not started until the runtime API is
+            # implemented. Database shutdown is always safe and deterministic.
+            await database_manager.close()
 
     return lifespan

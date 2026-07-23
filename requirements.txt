@@ -1,44 +1,35 @@
-# AI_Manga_Studio Core Dependencies
-# Python >= 3.11 required
+# AI_Manga_Studio runtime dependencies
+# Python >= 3.11
 
 # Web Framework & API
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
-httpx>=0.26.0
-websockets>=12.0
-aiofiles>=23.2.0
-python-multipart>=0.0.6
+fastapi>=0.109.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+pydantic>=2.5.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+httpx>=0.26.0,<1.0.0
+websockets>=12.0,<16.0
+aiofiles>=23.2.0,<25.0.0
+python-multipart>=0.0.6,<1.0.0
 
 # Database & ORM
-sqlalchemy>=2.0.25
-alembic>=1.13.0
-aiosqlite>=0.19.0
+sqlalchemy>=2.0.25,<3.0.0
+alembic>=1.13.0,<2.0.0
+aiosqlite>=0.19.0,<1.0.0
 
 # CLI & Logging
-rich>=13.7.0
-typer>=0.9.0
-loguru>=0.7.2
+rich>=13.7.0,<15.0.0
+typer>=0.9.0,<1.0.0
+loguru>=0.7.2,<1.0.0
 
 # Serialization & Configuration
-pyyaml>=6.0
-ujson>=5.9.0
-orjson>=3.9.0
+pyyaml>=6.0,<7.0
+ujson>=5.9.0,<6.0
+orjson>=3.9.0,<4.0
 
 # Image & Video Processing
-pillow>=10.2.0
-opencv-python>=4.9.0
-numpy>=1.26.0
+pillow>=10.2.0,<13.0.0
+opencv-python>=4.9.0,<5.0.0
+numpy>=1.26.0,<3.0.0
 
 # Progress & Utilities
-tqdm>=4.66.0
-
-# Development (install separately with: pip install -r requirements-dev.txt)
-# pytest>=8.0
-# pytest-asyncio>=0.23.0
-# pytest-cov>=4.1.0
-# black>=24.0
-# ruff>=0.1.0
-# mypy>=1.8.0
-（内容由AI生成，仅供参考）
+tqdm>=4.66.0,<5.0.0

@@ -1,8 +1,6 @@
 
 """Application container builder with full module wiring."""
 
-from dataclasses import dataclass
-
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from backend.app.container import ApplicationContainer
@@ -56,7 +54,11 @@ async def build_container(
     provider_registry.register("fake-image", fake_provider)
 
     # Module APIs
-    platform = PlatformModuleApi(settings=settings)
+    platform = PlatformModuleApi(
+        _database=database_manager,
+        _settings=settings,
+        _session_factory=session_factory,
+    )
     projects = ProjectsModuleApi(
         project_repo=project_repo,
         id_generator=id_generator,

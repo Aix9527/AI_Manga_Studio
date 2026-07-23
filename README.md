@@ -17,12 +17,12 @@ AIGC:
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688)](https://fastapi.tiangolo.com/)
-[![ComfyUI](https://img.shields.io/badge/ComfyUI-Integrated-orange)](https://github.com/comfyanonymous/ComfyUI)
+[![ComfyUI](https://img.shields.io/badge/ComfyUI-Experimental-orange)](https://github.com/comfyanonymous/ComfyUI)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes-brightgreen)]()
-[![AI Workflow](https://img.shields.io/badge/AI%20Workflow-Production-blueviolet)]()
+[![AI Workflow](https://img.shields.io/badge/AI%20Workflow-Alpha-blueviolet)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)]()
-[![Status](https://img.shields.io/badge/Status-Under%20Active%20Development-yellow)]()
+[![Status](https://img.shields.io/badge/Status-v0.1%20Alpha-yellow)]()
 
 ---
 
@@ -54,7 +54,27 @@ AI_Manga_Studio is designed to fill this gap. It is not a collection of tools �
 
 ---
 
+## Current Implementation Status | 当前实现状态
+
+AI_Manga_Studio is currently an **alpha-stage architecture and backend implementation**.
+The table below distinguishes runnable foundations from experimental and planned capabilities.
+
+| Capability | Status |
+|---|---|
+| FastAPI application bootstrap and health API | Available |
+| SQLite/SQLAlchemy persistence foundation | Available |
+| Project, narrative, character, storyboard, media, generation and workflow module skeletons | Available |
+| Fake image provider | Experimental |
+| Job runtime and recovery | Experimental |
+| ComfyUI adapter | Experimental |
+| Full browser UI | Planned |
+| End-to-end video, voice and final rendering | Planned |
+
+---
+
 ## Core Features | 核心功能
+
+The sections below describe the target product architecture. Refer to the status table above for current availability.
 
 ### Story Intelligence | 故事智能
 - **Novel Parsing** — Parse long-form novels into structured chapters, scenes, and segments
@@ -191,11 +211,11 @@ python run.py
 ## Quick Start | 快速开始
 
 ```
-1. Load Novel    → Upload your novel file
-2. Parse         → Auto-detect chapters, scenes, characters
-3. Storyboard    → Generate shot-by-shot storyboard
-4. Images        → Render each shot via configured AI provider
-5. Video         → Assemble frames into video with audio and subtitles
+1. Install dependencies
+2. Start the FastAPI service with `python run.py`
+3. Open `/docs` to inspect the currently available API
+4. Use the Fake Provider for development and integration testing
+5. Track production-pipeline milestones in the Roadmap
 ```
 
 ---
@@ -254,12 +274,14 @@ Plugins can be added without modifying core code. Each provider implements a sta
 
 ## Supported AI Providers | AI Provider 支持状态
 
-| Type | Supported | Planned |
-|------|-----------|---------|
-| **LLM** | OpenAI, Ollama, OpenRouter | Anthropic Claude, DeepSeek |
-| **Image** | ComfyUI (Flux, SDXL) | Midjourney API, DALL-E |
-| **Video** | ComfyUI Video (Wan) | Runway, Pika, Sora |
-| **Audio** | ElevenLabs, Fish Audio | Stable Audio, Bark |
+| Provider / Type | Status |
+|---|---|
+| Fake image provider | Experimental |
+| ComfyUI image adapter | Experimental |
+| OpenAI / OpenRouter / Ollama LLM adapters | Planned |
+| Flux / SDXL production workflows | Planned |
+| Wan / Runway / Pika / Sora video adapters | Planned |
+| ElevenLabs / Fish Audio / Stable Audio | Planned |
 
 ---
 
@@ -292,4 +314,3 @@ AI_Manga_Studio builds upon the incredible work of the open-source community:
 - [Flux](https://github.com/black-forest-labs/flux) — Image generation
 - [Wan](https://github.com/Wan-Video/Wan2.1) — Video generation
 - And all the model creators, dataset curators, and open-source contributors who make AI content creation possible.
-*（内容由AI生成，仅供参考）*

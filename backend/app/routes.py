@@ -1,4 +1,3 @@
-
 """Route registration for all modules."""
 
 from fastapi import FastAPI

@@ -4,6 +4,7 @@
 import logging
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from backend.modules.platform.infrastructure.settings import AppSettings
@@ -22,6 +23,10 @@ class DatabaseManager:
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
     @property
+    def initialized(self) -> bool:
+        return self._engine is not None and self._session_factory is not None
+
+    @property
     def engine(self) -> AsyncEngine:
         if self._engine is None:
             raise RuntimeError("DatabaseManager not initialized. Call init() first.")
@@ -34,6 +39,9 @@ class DatabaseManager:
         return self._session_factory
 
     async def init(self) -> None:
+        if self.initialized:
+            return
+
         """Initialize database engine and session factory."""
         db_path = self._settings.database_path()
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -63,6 +71,18 @@ class DatabaseManager:
             await conn.run_sync(Base.metadata.create_all)
 
         logger.info("Database tables created successfully")
+
+    async def ping(self) -> bool:
+        """Return whether the database accepts a simple query."""
+        if not self.initialized:
+            return False
+        try:
+            async with self.engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            logger.exception("Database health check failed")
+            return False
 
     async def close(self) -> None:
         """Dispose the database engine."""
