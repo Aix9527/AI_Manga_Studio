@@ -62,7 +62,7 @@ backend_v11/
 frontend_v4/
 
 # Project data (large)
-projects/
+/projects/
 
 # Old docs
 README_V4.md
