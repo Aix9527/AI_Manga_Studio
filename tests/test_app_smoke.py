@@ -8,7 +8,8 @@ from backend.modules.platform.infrastructure.settings import AppSettings
 
 def test_application_starts_and_health_endpoint_responds(tmp_path) -> None:
     settings = AppSettings(
-        data_dir=str(tmp_path),
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}",
+        projects_root=str(tmp_path / "projects"),
         environment="test",
     )
     app = create_application(settings)

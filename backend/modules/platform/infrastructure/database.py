@@ -42,11 +42,13 @@ class DatabaseManager:
         if self.initialized:
             return
 
-        """Initialize database engine and session factory."""
-        db_path = self._settings.database_path()
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        database_url = self._settings.database_url
+        # For SQLite, ensure the parent directory exists
+        if database_url.startswith("sqlite"):
+            db_path = database_url.split(":///")[-1]
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
-        self._engine = create_database_engine(f"sqlite+aiosqlite:///{db_path}")
+        self._engine = create_database_engine(database_url)
         self._session_factory = create_session_factory(self._engine)
 
         await self._create_tables()

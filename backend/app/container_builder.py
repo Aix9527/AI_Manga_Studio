@@ -107,5 +107,4 @@ async def build_container(
         media=media,
         generation=generation,
         workflows=workflows,
-        settings=settings,
     )
