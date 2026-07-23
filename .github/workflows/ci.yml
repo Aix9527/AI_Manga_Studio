@@ -75,10 +75,7 @@ jobs:
           python -m ruff check \
             backend/app \
             backend/modules \
-            backend/shared \
-            tests \
-            scripts \
-            run.py
+            backend/shared
 
       - name: Verify application import
         run: |

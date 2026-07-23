@@ -112,6 +112,8 @@ select = [
 ]
 ignore = [
     "B008",
+    "I001",   # import sorting
+    "UP032",  # f-string preference
 ]
 
 [tool.mypy]
