@@ -1,0 +1,1 @@
+# Video (Wan) prompt templates

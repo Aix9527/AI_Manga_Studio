@@ -1,0 +1,1 @@
+# Image (Flux) prompt templates

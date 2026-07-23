@@ -1,0 +1,1 @@
+# Camera planning prompt templates

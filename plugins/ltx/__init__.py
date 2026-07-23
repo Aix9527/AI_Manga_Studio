@@ -1,0 +1,1 @@
+# LTX Video Plugin (stub)

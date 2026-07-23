@@ -1,0 +1,1 @@
+# Quality Plugin (stub)

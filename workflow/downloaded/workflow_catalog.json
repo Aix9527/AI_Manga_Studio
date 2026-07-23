@@ -1,0 +1,229 @@
+{
+  "video": [
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\DaVinci-MagiHuman+Qwen3.5+flashvsr图生视频.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_DaVinci-MagiHuman+Qwen3.5+flashvsr图生视频.json",
+      "name": "DaVinci-MagiHuman+Qwen3.5+flashvsr图生视频"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\DiifuEraser视频水印去除+高清放大 (1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_DiifuEraser视频水印去除+高清放大 (1).json",
+      "name": "DiifuEraser视频水印去除+高清放大 (1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\LTX2.0+T2V+文生视频，自动官方提示词.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_LTX2.0+T2V+文生视频，自动官方提示词.json",
+      "name": "LTX2.0+T2V+文生视频，自动官方提示词"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\LTX2.0+T2V+文生视频，自动官方提示词，破甲.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_LTX2.0+T2V+文生视频，自动官方提示词，破甲.json",
+      "name": "LTX2.0+T2V+文生视频，自动官方提示词，破甲"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\LTX2.3+图生视频I2V+KJ.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_LTX2.3+图生视频I2V+KJ.json",
+      "name": "LTX2.3+图生视频I2V+KJ"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\LTX2.3+首尾帧+FL2V+.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_LTX2.3+首尾帧+FL2V+.json",
+      "name": "LTX2.3+首尾帧+FL2V+"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\ltx2_音频驱动视频_kj.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_ltx2_音频驱动视频_kj.json",
+      "name": "ltx2_音频驱动视频_kj"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Nvidia_RTX+超分放大++图像_视频.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_Nvidia_RTX+超分放大++图像_视频.json",
+      "name": "Nvidia_RTX+超分放大++图像_视频"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Wan2.2+Dasiwa+V10+++Qwen3.5+自动提示词提图生视频+i2v.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_Wan2.2+Dasiwa+V10+++Qwen3.5+自动提示词提图生视频+i2v.json",
+      "name": "Wan2.2+Dasiwa+V10+++Qwen3.5+自动提示词提图生视频+i2v"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\wan2.2+remix++UnifiedReward+vbvr++动感+推理.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_wan2.2+remix++UnifiedReward+vbvr++动感+推理.json",
+      "name": "wan2.2+remix++UnifiedReward+vbvr++动感+推理"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\本地解码，DaSiWa+i2v+图生视频.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_本地解码，DaSiWa+i2v+图生视频.json",
+      "name": "本地解码，DaSiWa+i2v+图生视频"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\（音色参考）DaVinci-MagiHuman+Qwen3.5图生视频.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_（音色参考）DaVinci-MagiHuman+Qwen3.5图生视频.json",
+      "name": "（音色参考）DaVinci-MagiHuman+Qwen3.5图生视频"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\LTX-2 T2V\\LTX2.0+T2V+文生视频，自动官方提示词.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_LTX2.0+T2V+文生视频，自动官方提示词.json",
+      "name": "LTX2.0+T2V+文生视频，自动官方提示词"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\LTX-2 T2V\\LTX2.0+T2V+文生视频，自动官方提示词，破甲.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\video_LTX2.0+T2V+文生视频，自动官方提示词，破甲.json",
+      "name": "LTX2.0+T2V+文生视频，自动官方提示词，破甲"
+    }
+  ],
+  "edit": [
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FireRed+单双图编辑.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_FireRed+单双图编辑.json",
+      "name": "FireRed+单双图编辑"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FireRed+妆容迁移.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_FireRed+妆容迁移.json",
+      "name": "FireRed+妆容迁移"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+单图_双图_多图编辑(1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_FLUX.2+klein+单图_双图_多图编辑(1).json",
+      "name": "FLUX.2+klein+单图_双图_多图编辑(1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+单图_双图_多图编辑.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_FLUX.2+klein+单图_双图_多图编辑.json",
+      "name": "FLUX.2+klein+单图_双图_多图编辑"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Flux.2+Klein+究极换头&换脸，零违和感.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_Flux.2+Klein+究极换头&换脸，零违和感.json",
+      "name": "Flux.2+Klein+究极换头&换脸，零违和感"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\klein+9b+bfs+换脸对比流.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_klein+9b+bfs+换脸对比流.json",
+      "name": "klein+9b+bfs+换脸对比流"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Klein+9b+BFS2.0+黑兽+最强换脸.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_Klein+9b+BFS2.0+黑兽+最强换脸.json",
+      "name": "Klein+9b+BFS2.0+黑兽+最强换脸"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\minecraft_我的世界_QwenEdit_2511_示例工作流 (1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_minecraft_我的世界_QwenEdit_2511_示例工作流 (1).json",
+      "name": "minecraft_我的世界_QwenEdit_2511_示例工作流 (1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\手绘插画风_ray_QwenEdit_2511_示例工作流.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_手绘插画风_ray_QwenEdit_2511_示例工作流.json",
+      "name": "手绘插画风_ray_QwenEdit_2511_示例工作流"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\编辑模型对比，firered+vs+2511+vs+klein.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\edit_编辑模型对比，firered+vs+2511+vs+klein.json",
+      "name": "编辑模型对比，firered+vs+2511+vs+klein"
+    }
+  ],
+  "other": [
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FireRed+海报.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_FireRed+海报.json",
+      "name": "FireRed+海报"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\SeeThrough二次元卡通PSD完整分层工作流V1 (1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_SeeThrough二次元卡通PSD完整分层工作流V1 (1).json",
+      "name": "SeeThrough二次元卡通PSD完整分层工作流V1 (1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\VoxCPM2+音色克隆（推荐）.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_VoxCPM2+音色克隆（推荐）.json",
+      "name": "VoxCPM2+音色克隆（推荐）"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\ZIT+双采极致人像+皮肤、光线、表情优化、z-engineer.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_ZIT+双采极致人像+皮肤、光线、表情优化、z-engineer.json",
+      "name": "ZIT+双采极致人像+皮肤、光线、表情优化、z-engineer"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\全能图片Pro风格素材生成器.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_全能图片Pro风格素材生成器.json",
+      "name": "全能图片Pro风格素材生成器"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\本地解码，DaSiWa+首尾帧.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_本地解码，DaSiWa+首尾帧.json",
+      "name": "本地解码，DaSiWa+首尾帧"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\海报创意工具：口喷做海报.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_海报创意工具：口喷做海报.json",
+      "name": "海报创意工具：口喷做海报"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\超强写真套图，完美一致性.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\other_超强写真套图，完美一致性.json",
+      "name": "超强写真套图，完美一致性"
+    }
+  ],
+  "image": [
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+vs+Z-Image(1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_FLUX.2+klein+vs+Z-Image(1).json",
+      "name": "FLUX.2+klein+vs+Z-Image(1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+vs+Z-Image.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_FLUX.2+klein+vs+Z-Image.json",
+      "name": "FLUX.2+klein+vs+Z-Image"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+文生图++T2I(1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_FLUX.2+klein+文生图++T2I(1).json",
+      "name": "FLUX.2+klein+文生图++T2I(1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+文生图++T2I.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_FLUX.2+klein+文生图++T2I.json",
+      "name": "FLUX.2+klein+文生图++T2I"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Moody+V5最强人像细节，Qwen3.5精准反推，光影皮肤感增强，终极批量写真.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_Moody+V5最强人像细节，Qwen3.5精准反推，光影皮肤感增强，终极批量写真.json",
+      "name": "Moody+V5最强人像细节，Qwen3.5精准反推，光影皮肤感增强，终极批量写真"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Z-Image+i2L+(image+to+lora).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_Z-Image+i2L+(image+to+lora).json",
+      "name": "Z-Image+i2L+(image+to+lora)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Z-image+Qwen3+4B+Vs+Qwen3+4b+Z-image+Engineer+V4.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\image_Z-image+Qwen3+4B+Vs+Qwen3+4b+Z-image+Engineer+V4.json",
+      "name": "Z-image+Qwen3+4B+Vs+Qwen3+4b+Z-image+Engineer+V4"
+    }
+  ],
+  "upscale": [
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+图像高清处理(1).json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\upscale_FLUX.2+klein+图像高清处理(1).json",
+      "name": "FLUX.2+klein+图像高清处理(1)"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\FLUX.2+klein+图像高清处理.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\upscale_FLUX.2+klein+图像高清处理.json",
+      "name": "FLUX.2+klein+图像高清处理"
+    }
+  ],
+  "audio": [
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\Qwen3+TTS+声音克隆+声音设计+自定义声音+三合一.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\audio_Qwen3+TTS+声音克隆+声音设计+自定义声音+三合一.json",
+      "name": "Qwen3+TTS+声音克隆+声音设计+自定义声音+三合一"
+    },
+    {
+      "source": "F:\\夸克下载\\NickAI的百宝箱\\工作流\\VoxCPM2+声音设计.json",
+      "dest": "D:\\AI_Manga_Studio\\workflow\\downloaded\\audio_VoxCPM2+声音设计.json",
+      "name": "VoxCPM2+声音设计"
+    }
+  ]
+}

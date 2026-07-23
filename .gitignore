@@ -56,6 +56,13 @@ backend_v4/
 backend_v6/
 backend_v7/
 backend_v10/
+backend_v11/
+
+# Old frontends
+frontend_v4/
+
+# Project data (large)
+projects/
 
 # Old docs
 README_V4.md
