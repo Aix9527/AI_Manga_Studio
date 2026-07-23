@@ -286,6 +286,55 @@ Plugins can be added without modifying core code. Each provider implements a sta
 
 ---
 
+## Demo Walkthrough
+
+> All steps below use the **Fake Image Provider** — no external API key required.
+
+```bash
+# 1. Start the server
+python run.py
+
+# 2. Create a project
+curl -X POST http://127.0.0.1:8000/api/v1/projects \
+  -H "Content-Type: application/json" \
+  -d '{"title": "星海迷途", "description": "一个关于星际旅行的故事"}'
+
+# 3. Import a novel chapter
+curl -X POST http://127.0.0.1:8000/api/v1/projects/{project_id}/narrative \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Chapter 1", "content": "林深醒来时，发现自己躺在一艘废弃的星际飞船里。舷窗外是陌生的星系，记忆一片空白。她摸索着站起身，手腕上的生物芯片闪烁着微弱的蓝光..."}'
+
+# 4. Extract characters
+curl -X POST http://127.0.0.1:8000/api/v1/projects/{project_id}/characters/extract
+
+# 5. List extracted characters (structured data)
+curl http://127.0.0.1:8000/api/v1/projects/{project_id}/characters
+
+# 6. Generate storyboard from narrative
+curl -X POST http://127.0.0.1:8000/api/v1/projects/{project_id}/storyboard/generate
+
+# 7. Create a generation task (Fake Provider returns a placeholder)
+curl -X POST http://127.0.0.1:8000/api/v1/generation/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"storyboard_id": "{storyboard_id}", "provider": "fake-image"}'
+
+# 8. Query task result
+curl http://127.0.0.1:8000/api/v1/generation/tasks/{task_id}
+```
+
+### What this demonstrates
+
+| Step | Module | What happens |
+|------|--------|-------------|
+| 1 | Bootstrap | FastAPI app starts, SQLite DB created, container wired |
+| 2 | Projects | Project entity persisted to SQLite |
+| 3 | Narrative | Novel text stored and associated with project |
+| 4 | Characters | Character extraction pipeline runs (structured output) |
+| 5 | Characters | Extracted characters returned as typed data |
+| 6 | Storyboard | Scene decomposition from narrative |
+| 7 | Generation | Task created, Fake Provider enqueued |
+| 8 | Generation | Task status and result retrieved |
+
 ## Contributing | 贡献指南
 
 We welcome contributions of all kinds — code, documentation, bug reports, feature requests, and plugin development.
