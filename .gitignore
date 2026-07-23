@@ -1,1 +1,87 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Cache & Temp
+cache/
+temp/
+logs/
+output/
+storage/
+renders/
+
+# Models (too large)
+models/
+comfyui/
+
+# Assets
+assets/
+BGM/
+CFG/
+Char/
+Denoise/
+FPS/
+Frames/
+Model/
+Motion/
+Resolution/
+Sampler/
+Screenplay/
+Shots/
+Steps/
+Story/
+Subtitles/
+TTS/
+
+# Novels content
+novels/
+Novel/
+novel.txt
+pipeline_part1.txt
+
+# Old backends
+backend_v3/
+backend_v4/
+backend_v6/
+backend_v7/
+backend_v10/
+
+# Old docs
+README_V4.md
+README_V6.md
+README_INTEGRATED.md
+UPGRADE_REPORT.md
+UPGRADE_V4_GUIDE.md
+UPGRADE_V5_REPORT.md
+INTEGRATION_SUMMARY.md
+ENVIRONMENT.md
+
+# Misc
+.superpowers/
+.agents/
 .worktrees/
+127.0.0.1_8188/
+scene_dna.json
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend_v4/node_modules/
+
+# Python cache
+*.pyc
+*.bak
+
+# DB
+database/*.db

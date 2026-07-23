@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/YOUR_USERNAME/AI_Manga_Studio/discussions
+    about: For general discussion, ideas, and Q&A — please use Discussions instead of Issues.
+  - name: Documentation
+    url: https://github.com/YOUR_USERNAME/AI_Manga_Studio/tree/main/docs
+    about: Read the project documentation before opening an issue.

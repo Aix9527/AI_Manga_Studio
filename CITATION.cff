@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use AI_Manga_Studio in your research, please cite it as below."
+title: "AI_Manga_Studio: Open-source AI Story Production Infrastructure"
+authors:
+  - family-names: "AI_Manga_Studio_Team"
+    given-names: ""
+repository-code: "https://github.com/YOUR_USERNAME/AI_Manga_Studio"
+url: "https://github.com/YOUR_USERNAME/AI_Manga_Studio"
+abstract: >
+  AI_Manga_Studio is an open-source production infrastructure that
+  transforms long-form stories into consistent visual storytelling
+  through an AI-native workflow, covering novel parsing, character
+  memory management, storyboard planning, prompt generation, image
+  and video synthesis, and automated post-production.
+keywords:
+  - "AI content production"
+  - "story-to-video"
+  - "character consistency"
+  - "workflow orchestration"
+  - "multi-provider AI"
+  - "storyboard generation"
+  - "ComfyUI integration"
+license: Apache-2.0
+version: 0.1.0-alpha
+date-released: "2026-07-23"
