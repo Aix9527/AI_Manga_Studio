@@ -101,18 +101,18 @@ class IdentityDriftDetector:
         total_fields = 0
         drifted_fields = 0
 
-        for field in self.IDENTITY_FIELDS:
-            ref_val = reference.get(field)
-            cand_val = candidate.get(field)
+        for fld in self.IDENTITY_FIELDS:
+            ref_val = reference.get(fld)
+            cand_val = candidate.get(fld)
             total_fields += 1
 
             if ref_val is not None and cand_val is not None and ref_val != cand_val:
                 drifted_fields += 1
                 discrepancies.append({
-                    "field": field,
+                    "field": fld,
                     "referenceValue": ref_val,
                     "candidateValue": cand_val,
-                    "severity": "high" if field in ("hair_color", "eye_color", "signature_trait") else "medium",
+                    "severity": "high" if fld in ("hair_color", "eye_color", "signature_trait") else "medium",
                 })
 
         drift_score = drifted_fields / max(total_fields, 1)

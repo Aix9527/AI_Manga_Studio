@@ -2,11 +2,10 @@
 """Storyboard API routes."""
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel
 
 from backend.app.container import ApplicationContainer
-from backend.modules.storyboard.domain.storyboard import Shot, ShotCharacterBinding, StoryboardScene
+from backend.modules.storyboard.domain.storyboard import ShotCharacterBinding
 
 router = APIRouter()
 
@@ -16,7 +15,7 @@ class CreateSceneRequest(BaseModel):
     sequence_number: int
     title: str = ""
     description: str = ""
-    narrative_scene_id: Optional[str] = None
+    narrative_scene_id: str | None = None
 
 
 class CreateShotRequest(BaseModel):

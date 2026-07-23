@@ -46,7 +46,6 @@ class GenerationModuleApi:
 
         # Create a job to execute generation asynchronously
         from backend.modules.workflows.domain.job import Job, JobStatus
-        import json
 
         job = Job(
             job_id=self.id_generator.new("job"),

@@ -41,7 +41,6 @@ class SqlAlchemyJobRepository:
             return self._to_job(m)
 
     async def list_pending(self, limit: int = 10) -> list[Job]:
-        now = datetime.utcnow()
         async with self._session_factory() as session:
             result = await session.execute(
                 select(JobModel)

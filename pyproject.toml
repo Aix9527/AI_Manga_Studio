@@ -112,6 +112,7 @@ select = [
 ]
 ignore = [
     "B008",
+    "E501",   # line too long
     "I001",   # import sorting
     "UP032",  # f-string preference
 ]

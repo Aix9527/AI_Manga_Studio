@@ -2,7 +2,6 @@
 """Storyboard module public API."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 from backend.modules.characters.infrastructure.repository import SqlAlchemyCharacterRepository
 from backend.modules.storyboard.domain.storyboard import Shot, StoryboardScene
@@ -22,7 +21,7 @@ class StoryboardModuleApi:
     def _storyboard_repo(self) -> SqlAlchemyStoryboardRepository:
         return self.storyboard_repo
 
-    async def create_scene(self, project_id: str, sequence_number: int, title: str, description: str, narrative_scene_id: Optional[str]) -> StoryboardScene:
+    async def create_scene(self, project_id: str, sequence_number: int, title: str, description: str, narrative_scene_id: str | None) -> StoryboardScene:
         now = self.clock.now()
         scene = StoryboardScene(
             scene_id=self.id_generator.new("sscene"), project_id=project_id,

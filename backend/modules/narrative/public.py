@@ -1,8 +1,7 @@
 
 """Narrative module public API."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 
 from backend.modules.narrative.domain.story import StoryDocument
 from backend.modules.narrative.infrastructure.repository import SqlAlchemyNarrativeRepository

@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.modules.characters.domain.identity import (
@@ -126,7 +126,7 @@ async def check_identity_drift(req: DriftCheckRequest):
         )
     except Exception as e:
         logger.exception("Drift check failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @consistency_router.get("/{character_id}/identity-dna")
