@@ -82,10 +82,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/AI_Manga_Studio"
-Documentation = "https://github.com/YOUR_USERNAME/AI_Manga_Studio/tree/main/docs"
-Repository = "https://github.com/YOUR_USERNAME/AI_Manga_Studio"
-Issues = "https://github.com/YOUR_USERNAME/AI_Manga_Studio/issues"
+Homepage = "https://github.com/Aix9527/AI_Manga_Studio"
+Documentation = "https://github.com/Aix9527/AI_Manga_Studio/tree/master/docs"
+Repository = "https://github.com/Aix9527/AI_Manga_Studio"
+Issues = "https://github.com/Aix9527/AI_Manga_Studio/issues"
 
 [project.scripts]
 ai-manga = "backend.cli:main"
