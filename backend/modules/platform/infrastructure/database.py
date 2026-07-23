@@ -92,7 +92,7 @@ class DatabaseManager:
 
         from backend.shared.infrastructure.database.base import Base
 
-        async with self._engine.begin() as conn:
+        async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
         logger.info("Database tables created successfully")

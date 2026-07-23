@@ -44,7 +44,10 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Compile all Python sources
-        run: python -m compileall -q backend tests run.py
+        run: python -m compileall -q backend tests scripts run.py
+
+      - name: Run Ruff
+        run: ruff check backend tests scripts run.py
 
       - name: Verify application import
         run: |
@@ -53,5 +56,15 @@ jobs:
       - name: Run complete test suite
         run: pytest -q --maxfail=1
 
+      - name: Run mypy diagnostics
+        continue-on-error: true
+        run: mypy backend
+
       - name: Verify working tree remains clean
-        run: git diff --exit-code
+        shell: bash
+        run: |
+          changes="$(git status --porcelain)"
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            exit 1
+          fi
