@@ -1,15 +1,14 @@
 
 """In-memory provider registry for generation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from backend.modules.generation.infrastructure.adapters.base import GenerationProvider
 
 
 @dataclass(slots=True)
 class InMemoryProviderRegistry:
-    def __init__(self) -> None:
-        self._providers: dict[str, GenerationProvider] = {}
+    _providers: dict[str, GenerationProvider] = field(default_factory=dict)
 
     def register(self, provider_id: str, provider: GenerationProvider) -> None:
         if provider_id in self._providers:
