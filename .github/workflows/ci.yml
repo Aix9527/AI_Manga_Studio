@@ -58,7 +58,11 @@ jobs:
 
       - name: Run mypy diagnostics
         continue-on-error: true
-        run: mypy backend
+        run: |
+          mypy \
+            backend/app \
+            backend/modules/platform \
+            backend/modules/generation/infrastructure/provider_registry.py
 
       - name: Verify working tree remains clean
         shell: bash

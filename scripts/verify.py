@@ -49,9 +49,14 @@ COMMANDS = [
 def main() -> int:
     for command in COMMANDS:
         print(f"> {' '.join(command)}")
+
         result = subprocess.run(command, check=False)
 
         if result.returncode != 0:
+            print(
+                f"Verification failed with exit code "
+                f"{result.returncode}: {' '.join(command)}"
+            )
             return result.returncode
 
     result = subprocess.run(
