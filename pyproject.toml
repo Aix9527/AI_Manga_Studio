@@ -121,5 +121,6 @@ warn_return_any = true
 warn_unused_configs = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra"

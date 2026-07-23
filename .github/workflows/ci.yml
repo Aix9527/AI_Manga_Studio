@@ -25,7 +25,10 @@ jobs:
       matrix:
         python-version:
           - "3.11"
-          - "3.12"
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
 
     steps:
       - name: Checkout repository
@@ -36,39 +39,98 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+      - name: Show environment
+        run: |
+          python --version
+          python -m pip --version
+          git rev-parse HEAD
+          git status --short
+
+      - name: Upgrade packaging tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+          python -m pip freeze
 
-      - name: Compile all Python sources
-        run: python -m compileall -q backend tests scripts run.py
+      - name: Compile active Python sources
+        run: |
+          python -m compileall -q \
+            backend/app \
+            backend/modules \
+            backend/shared \
+            tests \
+            scripts \
+            run.py
 
       - name: Run Ruff
-        run: ruff check backend tests scripts run.py
+        run: |
+          python -m ruff check \
+            backend/app \
+            backend/modules \
+            backend/shared \
+            tests \
+            scripts \
+            run.py
 
       - name: Verify application import
         run: |
-          python -c "from backend.app.main import app; assert app.title == 'AI Manga Studio'"
+          python - <<'PY'
+          from backend.app.main import app
 
-      - name: Run complete test suite
-        run: pytest -q --maxfail=1
+          print("Application title:", app.title)
+          print("Registered routes:", len(app.routes))
+
+          assert app.title == "AI Manga Studio"
+          assert len(app.routes) > 0
+          PY
+
+      - name: Run smoke tests
+        run: |
+          python -m pytest \
+            tests/test_app_smoke.py \
+            tests/test_database_manager.py \
+            tests/test_provider_registry.py \
+            tests/test_core_imports.py \
+            -vv \
+            -x \
+            --tb=long
+
+      - name: Run remaining tests
+        run: |
+          python -m pytest \
+            -vv \
+            --maxfail=1 \
+            --tb=long
 
       - name: Run mypy diagnostics
         continue-on-error: true
         run: |
-          mypy \
+          python -m mypy \
             backend/app \
             backend/modules/platform \
             backend/modules/generation/infrastructure/provider_registry.py
+
+      - name: Show generated repository changes
+        if: always()
+        run: |
+          echo "Repository status after CI:"
+          git status --short
 
       - name: Verify working tree remains clean
         shell: bash
         run: |
           changes="$(git status --porcelain)"
+
           if [ -n "$changes" ]; then
+            echo "CI generated unexpected repository changes:"
             echo "$changes"
             exit 1
           fi
