@@ -9,6 +9,7 @@ a DatabaseManager class for session lifecycle management.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 
@@ -24,6 +25,7 @@ from sqlalchemy import (
     JSON,
     create_engine,
     event,
+    select,
 )
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -65,6 +67,7 @@ class ProjectModel(Base):
     storyboards = relationship("StoryboardModel", back_populates="project", lazy="selectin")
     assets = relationship("AssetModel", back_populates="project", lazy="selectin")
     jobs = relationship("JobModel", back_populates="project", lazy="selectin")
+    stories = relationship("StoryModel", back_populates="project", lazy="selectin")
 
 
 class StoryModel(Base):
@@ -331,13 +334,11 @@ class ProjectRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> ProjectModel:
-        import uuid
         project = ProjectModel(project_id=str(uuid.uuid4()), **kwargs)
         self.session.add(project)
         return project
 
     async def get(self, project_id: str) -> ProjectModel | None:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(ProjectModel).where(
                 ProjectModel.project_id == project_id,
@@ -347,7 +348,6 @@ class ProjectRepository:
         return result.scalar_one_or_none()
 
     async def find_active(self) -> list[ProjectModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(ProjectModel)
             .where(ProjectModel.deleted_at.is_(None))
@@ -370,20 +370,17 @@ class CharacterRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> CharacterModel:
-        import uuid
         character = CharacterModel(character_id=str(uuid.uuid4()), **kwargs)
         self.session.add(character)
         return character
 
     async def get(self, character_id: str) -> CharacterModel | None:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(CharacterModel).where(CharacterModel.character_id == character_id)
         )
         return result.scalar_one_or_none()
 
     async def find_by_project(self, project_id: str) -> list[CharacterModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(CharacterModel).where(CharacterModel.project_id == project_id)
         )
@@ -397,13 +394,11 @@ class StoryRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> StoryModel:
-        import uuid
         story = StoryModel(story_id=str(uuid.uuid4()), **kwargs)
         self.session.add(story)
         return story
 
     async def find_by_project(self, project_id: str) -> list[StoryModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(StoryModel).where(StoryModel.project_id == project_id)
         )
@@ -417,13 +412,11 @@ class SceneRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> SceneModel:
-        import uuid
         scene = SceneModel(scene_id=str(uuid.uuid4()), **kwargs)
         self.session.add(scene)
         return scene
 
     async def find_by_story(self, story_id: str) -> list[SceneModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(SceneModel).where(SceneModel.story_id == story_id)
         )
@@ -437,20 +430,17 @@ class StoryboardRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> StoryboardModel:
-        import uuid
         storyboard = StoryboardModel(storyboard_id=str(uuid.uuid4()), **kwargs)
         self.session.add(storyboard)
         return storyboard
 
     async def get(self, storyboard_id: str) -> StoryboardModel | None:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(StoryboardModel).where(StoryboardModel.storyboard_id == storyboard_id)
         )
         return result.scalar_one_or_none()
 
     async def find_by_project(self, project_id: str) -> list[StoryboardModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(StoryboardModel).where(StoryboardModel.project_id == project_id)
         )
@@ -464,13 +454,11 @@ class ShotRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> ShotModel:
-        import uuid
         shot = ShotModel(shot_id=str(uuid.uuid4()), **kwargs)
         self.session.add(shot)
         return shot
 
     async def find_by_storyboard(self, storyboard_id: str) -> list[ShotModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(ShotModel)
             .where(ShotModel.storyboard_id == storyboard_id)
@@ -486,27 +474,23 @@ class AssetRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> AssetModel:
-        import uuid
         asset = AssetModel(asset_id=str(uuid.uuid4()), **kwargs)
         self.session.add(asset)
         return asset
 
     async def get(self, asset_id: str) -> AssetModel | None:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(AssetModel).where(AssetModel.asset_id == asset_id)
         )
         return result.scalar_one_or_none()
 
     async def find_by_project(self, project_id: str) -> list[AssetModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(AssetModel).where(AssetModel.project_id == project_id)
         )
         return list(result.scalars().all())
 
     async def find_by_type(self, project_id: str, asset_type: str) -> list[AssetModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(AssetModel).where(
                 AssetModel.project_id == project_id,
@@ -523,20 +507,17 @@ class JobRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> JobModel:
-        import uuid
         job = JobModel(job_id=str(uuid.uuid4()), **kwargs)
         self.session.add(job)
         return job
 
     async def get(self, job_id: str) -> JobModel | None:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(JobModel).where(JobModel.job_id == job_id)
         )
         return result.scalar_one_or_none()
 
     async def find_by_project(self, project_id: str) -> list[JobModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(JobModel)
             .where(JobModel.project_id == project_id)
@@ -545,7 +526,6 @@ class JobRepository:
         return list(result.scalars().all())
 
     async def find_by_status(self, status: str) -> list[JobModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(JobModel).where(JobModel.status == status)
         )
@@ -559,13 +539,11 @@ class ReviewRepository:
         self.session = session
 
     async def create(self, **kwargs: Any) -> ReviewModel:
-        import uuid
         review = ReviewModel(review_id=str(uuid.uuid4()), **kwargs)
         self.session.add(review)
         return review
 
     async def find_by_target(self, target_type: str, target_id: str) -> list[ReviewModel]:
-        from sqlalchemy import select
         result = await self.session.execute(
             select(ReviewModel).where(
                 ReviewModel.target_type == target_type,
@@ -573,7 +551,3 @@ class ReviewRepository:
             )
         )
         return list(result.scalars().all())
-
-
-# Add missing relationship on ProjectModel
-ProjectModel.stories = relationship("StoryModel", back_populates="project", lazy="selectin")
