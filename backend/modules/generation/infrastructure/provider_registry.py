@@ -18,8 +18,11 @@ class InMemoryProviderRegistry:
     def get(self, provider_id: str) -> GenerationProvider:
         try:
             return self._providers[provider_id]
-        except KeyError:
-            raise KeyError(f"Provider '{provider_id}' not found. Available: {list(self._providers.keys())}")
+        except KeyError as exc:
+            available = ", ".join(sorted(self._providers)) or "none"
+            raise KeyError(
+                f"Provider '{provider_id}' not found. Available: {available}"
+            ) from exc
 
     def providers(self) -> list[str]:
         return list(self._providers.keys())

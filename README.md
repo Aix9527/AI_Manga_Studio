@@ -15,6 +15,7 @@ AIGC:
 >
 > Novel → Character → Storyboard → Manga → Video
 
+[![CI](https://github.com/Aix9527/AI_Manga_Studio/actions/workflows/ci.yml/badge.svg)](https://github.com/Aix9527/AI_Manga_Studio/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688)](https://fastapi.tiangolo.com/)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-Experimental-orange)](https://github.com/comfyanonymous/ComfyUI)

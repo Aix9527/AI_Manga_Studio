@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from backend.modules.platform.infrastructure.settings import AppSettings
@@ -39,20 +40,42 @@ class DatabaseManager:
         return self._session_factory
 
     async def init(self) -> None:
+        """Initialize the database engine, session factory, and schema."""
         if self.initialized:
             return
 
         database_url = self._settings.database_url
-        # For SQLite, ensure the parent directory exists
-        if database_url.startswith("sqlite"):
-            db_path = database_url.split(":///")[-1]
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        parsed_url = make_url(database_url)
+
+        if parsed_url.get_backend_name() == "sqlite":
+            database_name = parsed_url.database
+
+            if database_name and database_name != ":memory:":
+                database_path = Path(database_name).expanduser()
+
+                if not database_path.is_absolute():
+                    database_path = Path.cwd() / database_path
+
+                database_path.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
 
         self._engine = create_database_engine(database_url)
         self._session_factory = create_session_factory(self._engine)
 
-        await self._create_tables()
-        logger.info("DatabaseManager initialized at %s", db_path)
+        try:
+            await self._create_tables()
+        except Exception:
+            await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None
+            raise
+
+        logger.info(
+            "DatabaseManager initialized using %s",
+            parsed_url.render_as_string(hide_password=True),
+        )
 
     async def _create_tables(self) -> None:
         """Auto-create all tables from registered ORM models."""
