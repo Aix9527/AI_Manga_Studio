@@ -105,12 +105,16 @@ def test_runtime_recovers_expired_running_job(job_repo, running_job, tmp_path):
 
 
 def test_formal_app_mounts_the_durable_jobs_router_once():
+    job_endpoints = {
+        route.endpoint
+        for route in jobs_router.routes
+    }
     registrations = [
         route
         for route in app.routes
-        if getattr(route, 'original_router', None) is jobs_router
+        if getattr(route, 'endpoint', None) in job_endpoints
     ]
-    assert len(registrations) == 1
+    assert len(registrations) == len(jobs_router.routes)
 
     paths = app.openapi()['paths']
     assert set(paths['/api/jobs']) == {'post', 'get'}
