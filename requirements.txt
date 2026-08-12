@@ -3,7 +3,7 @@
 # ============================================================
 
 # --- Web Framework ---
-fastapi>=0.110.0,<0.200.0
+fastapi>=0.110.0,<0.116.0  # Wave 3 verified: 0.115.14 (0.139 changed router internals)
 uvicorn[standard]>=0.29.0,<1.0.0
 starlette>=0.36.0
 
