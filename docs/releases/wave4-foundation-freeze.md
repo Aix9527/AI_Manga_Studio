@@ -2,9 +2,15 @@
 
 ## Status
 
-Release status: Wave 4 RC1 candidate.
+Release status: PRODUCTION RELEASE - LIVE GATES PASSED.
 Deterministic code/contract freeze complete.
-Final production release is blocked only on Wave 4E.2 live provider gates.
+Wave 4E.2 live provider gates: ALL PASS on RTX 5070 Ti / ComfyUI 0.30.2.
+
+Hardware validation (RTX 5070 Ti 16GB):
+- Wan 2.1 I2V 14B FP8 live: PASS
+- LTX 2.3 22B distilled FP8 live: PASS
+- live submit -> persist -> kill -> resume: PASS (single /prompt, zero resubmit)
+- crash-window uncertain protection: PASS
 
 ## Database
 
@@ -68,14 +74,22 @@ Main repository:
 `tests/models/smoke/test_comfyui_smoke.py` — marked `live_provider` + `gpu`;
 auto-skipped when ComfyUI is unreachable. Not counted as deterministic failure.
 
-## Pending Live Gates (Wave 4E.2)
+## Live Gates (Wave 4E.2) - COMPLETE 2026-08-13
 
-- [ ] real ComfyUI preflight (0 skip)
-- [ ] real supported-provider generation (Wan, and LTX23 if declared supported)
-- [ ] persisted binding == actual provider invocation
-- [ ] submit → persist prompt_id → worker kill → resume existing remote task
-- [ ] submit crash-window behavior against real ComfyUI
-- [ ] no duplicate provider submission
+- [x] real ComfyUI preflight (0 skip, 0 fail)
+- [x] real Wan 2.1 I2V generation (13 frames -> valid mp4, non-zero duration)
+- [x] real LTX 2.3 I2V generation (9 frames -> valid mp4, non-zero duration)
+- [x] persisted binding == actual provider invocation
+- [x] submit -> persist real prompt_id -> worker kill -> worker B RESUMED same prompt
+- [x] exactly one POST /prompt (HTTP audit), zero resubmit
+- [x] crash-window: POST accepted but worker killed before persist -> UNCERTAIN, zero resubmit
+- [x] ComfyUI continues generating after worker kill; original prompt completes
+
+Environment requirements (fixed):
+- PYTHONPATH=D:\AI_Manga_Studio
+- NO_PROXY=127.0.0.1,localhost (both cases; httpx otherwise 502s)
+- AI_MANGA_LIVE_REQUIRED=1
+- run with D:\ComfyUI\.venv\Scripts\python.exe (has torch 2.13.0+cu130)
 ## Wave 4E.2 Live Gate Commands (fixed)
 
 Run on a machine with real ComfyUI + CUDA GPU. All commands are executed from `D:\AI_Manga_Studio`.
