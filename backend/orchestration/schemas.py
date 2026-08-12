@@ -108,6 +108,41 @@ class JobCreate(FiniteJsonRequest):
         return cleaned
 
 
+
+
+class ProviderBinding(FiniteJsonRequest):
+    """Durable execution-provider selection for a job.
+
+    The binding is immutable once persisted. It survives worker lease expiry,
+    process restart, retry, recovery and replay.
+
+    It intentionally does not contain worker ownership information. Worker
+    ownership belongs to the repository-backed lease contract.
+    """
+
+    provider: str = Field(min_length=1, max_length=128)
+    route: str = Field(default="", max_length=256)
+    model: str = Field(default="", max_length=256)
+    workflow: str = Field(default="", max_length=512)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("provider", "route", "model", "workflow", mode="before")
+    @classmethod
+    def trim_binding_strings(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("provider")
+    @classmethod
+    def require_provider_name(cls, value: str) -> str:
+        if not value:
+            raise ValueError("provider binding requires a provider")
+        if any(category(char) == "Cc" for char in value):
+            raise ValueError("provider contains control characters")
+        return value
+
+
 class ArtifactView(BaseModel):
     kind: str
     path: str
@@ -140,6 +175,7 @@ class JobView(BaseModel):
     progress: float = Field(default=0.0, ge=0.0, le=1.0)
     message: str = ""
     final_video: str = ""
+    provider_binding: ProviderBinding | None = None
     created_at: datetime
     updated_at: datetime
     steps: list[JobStepView] = Field(default_factory=list)

@@ -315,7 +315,7 @@ def test_migration_version_is_recorded_once_across_reopens(tmp_path):
     with second.connection() as connection:
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
 
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
     assert foreign_keys == 1
 
 
@@ -335,7 +335,7 @@ def test_v3_adds_durable_command_idempotency_registry(tmp_path):
             "PRAGMA index_list('job_commands')"
         ).fetchall()
 
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
     assert [row["name"] for row in columns] == [
         "idempotency_key",
         "job_id",
@@ -385,7 +385,7 @@ def test_v4_backfills_immutable_create_request_from_v3_settings(tmp_path):
             else None
         )
 
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
     create_request_column = next(
         row for row in job_columns if row["name"] == "create_request_json"
     )
@@ -423,7 +423,7 @@ def test_v2_replaces_legacy_event_index(tmp_path):
         ).fetchall()
 
     assert [row["name"] for row in columns] == ["job_id", "id"]
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
 
 
 def test_reopen_does_not_rebuild_correct_event_index(tmp_path):
@@ -496,7 +496,7 @@ def test_v2_upgrades_legacy_artifacts_and_preserves_validated_rows(tmp_path):
                 (row["seq"], row["from"], row["to"], row["on_delete"])
             )
 
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
     assert validated_at["type"] == "TEXT"
     assert validated_at["notnull"] == 1
     assert artifact["validated_at"] == "2026-01-01T00:00:00+00:00"

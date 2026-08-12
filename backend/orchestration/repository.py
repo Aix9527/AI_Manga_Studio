@@ -16,7 +16,7 @@ from backend.orchestration.checkpoints import (
     validate_checkpoint,
     validated_file_identities,
 )
-from backend.orchestration.schemas import JobCreate
+from backend.orchestration.schemas import JobCreate, ProviderBinding
 
 if TYPE_CHECKING:
     from backend.orchestration.database import OrchestrationDatabase
@@ -30,8 +30,42 @@ def rowdict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
 
+def _serialize_provider_binding(binding: ProviderBinding) -> str:
+    return json.dumps(
+        binding.model_dump(mode="json"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _deserialize_provider_binding(
+    raw: str | None,
+) -> ProviderBinding | None:
+    if not raw:
+        return None
+    return ProviderBinding.model_validate(json.loads(raw))
+
+
+def _provider_binding_json_value(
+    raw: str | None,
+) -> dict | None:
+    binding = _deserialize_provider_binding(raw)
+    if binding is None:
+        return None
+    return binding.model_dump(mode="json")
+
+
 class LeaseOwnershipError(RuntimeError):
     """Raised when a worker tries to mutate a job it no longer owns."""
+
+
+class ProviderBindingConflictError(RuntimeError):
+    """Raised when an immutable provider binding would be replaced."""
+
+
+class ProviderSubmissionConflictError(RuntimeError):
+    """Raised when a provider submission identity would be overwritten."""
 
 
 class JobNotFoundError(LookupError):
@@ -101,7 +135,216 @@ class JobRepository:
             created = connection.execute(
                 "SELECT * FROM jobs WHERE id = ?", (job_id,)
             ).fetchone()
-            return rowdict(created)
+            job = rowdict(created)
+            job["settings"] = json.loads(job.pop("settings_json"))
+            job.pop("create_request_json", None)
+            job["provider_binding"] = _provider_binding_json_value(
+                job.pop("provider_binding_json", None)
+            )
+            return job
+
+
+
+    def get_provider_binding(
+        self,
+        job_id: str,
+    ) -> ProviderBinding | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT provider_binding_json
+                FROM jobs
+                WHERE id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+
+        if row is None:
+            raise KeyError(job_id)
+
+        return _deserialize_provider_binding(
+            row["provider_binding_json"]
+        )
+
+    def set_provider_binding(
+        self,
+        job_id: str,
+        binding: ProviderBinding,
+    ) -> ProviderBinding:
+        """
+        Persist the immutable provider binding for a job.
+
+        First write wins.
+
+        Re-writing the exact same binding is idempotent. Attempting to replace
+        an existing binding with a different value raises
+        ProviderBindingConflictError.
+        """
+
+        if not isinstance(binding, ProviderBinding):
+            binding = ProviderBinding.model_validate(binding)
+
+        serialized = _serialize_provider_binding(binding)
+        now = utcnow()
+
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE jobs
+                SET provider_binding_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                  AND provider_binding_json IS NULL
+                """,
+                (
+                    serialized,
+                    now,
+                    job_id,
+                ),
+            )
+
+            row = connection.execute(
+                """
+                SELECT provider_binding_json
+                FROM jobs
+                WHERE id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+
+            if row is None:
+                raise KeyError(job_id)
+
+            persisted = _deserialize_provider_binding(
+                row["provider_binding_json"]
+            )
+
+            if persisted is None:
+                raise RuntimeError(
+                    f"provider binding for job {job_id!r} "
+                    "was not persisted"
+                )
+
+            if persisted != binding:
+                raise ProviderBindingConflictError(
+                    f"job {job_id!r} already has provider binding "
+                    f"{persisted.model_dump(mode='json')!r}; "
+                    f"refusing replacement with "
+                    f"{binding.model_dump(mode='json')!r}"
+                )
+
+            return persisted
+
+
+
+    def reserve_provider_submission(
+        self,
+        job_id: str,
+        step_id: str,
+        attempt: int,
+        provider: str,
+    ) -> tuple[dict[str, Any], bool]:
+        """Reserve a durable provider submission for one logical attempt.
+
+        First write wins per (job_id, step_id, attempt). Returns
+        (submission_dict, created). A concurrent worker gets created=False.
+        """
+        key = f"{job_id}:{step_id}:{attempt}"
+        now = utcnow()
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM provider_submissions
+                WHERE job_id = ? AND step_id = ? AND attempt = ?
+                """,
+                (job_id, step_id, attempt),
+            ).fetchone()
+            if row is not None:
+                return rowdict(row), False
+
+            submission_id = str(uuid4())
+            connection.execute(
+                """
+                INSERT INTO provider_submissions(
+                    id, job_id, step_id, attempt, provider,
+                    submission_key, remote_submission_id, status,
+                    submitted_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, NULL, 'reserved',
+                          NULL, ?, ?)
+                """,
+                (submission_id, job_id, step_id, attempt, provider,
+                 key, now, now),
+            )
+            created = connection.execute(
+                "SELECT * FROM provider_submissions WHERE id = ?",
+                (submission_id,),
+            ).fetchone()
+            return rowdict(created), True
+
+    def get_provider_submission(
+        self,
+        job_id: str,
+        step_id: str,
+        attempt: int,
+    ) -> dict[str, Any] | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM provider_submissions
+                WHERE job_id = ? AND step_id = ? AND attempt = ?
+                """,
+                (job_id, step_id, attempt),
+            ).fetchone()
+        return rowdict(row) if row is not None else None
+
+    def record_provider_submission_id(
+        self,
+        submission_key: str,
+        remote_submission_id: str,
+        status: str = "submitted",
+    ) -> dict[str, Any]:
+        """Persist the remote submission id. The id is immutable once set."""
+        if not remote_submission_id:
+            raise ValueError("remote_submission_id must be non-empty")
+        now = utcnow()
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM provider_submissions
+                WHERE submission_key = ?
+                """,
+                (submission_key,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(submission_key)
+
+            existing = row["remote_submission_id"]
+            if existing is not None and existing != remote_submission_id:
+                raise ProviderSubmissionConflictError(
+                    f"submission {submission_key!r} already has remote id "
+                    f"{existing!r}; refusing to overwrite with "
+                    f"{remote_submission_id!r}"
+                )
+            if existing == remote_submission_id:
+                return rowdict(row)
+
+            connection.execute(
+                """
+                UPDATE provider_submissions
+                SET remote_submission_id = ?, status = ?,
+                    submitted_at = ?, updated_at = ?
+                WHERE submission_key = ?
+                """,
+                (remote_submission_id, status, now, now, submission_key),
+            )
+            updated = connection.execute(
+                """
+                SELECT * FROM provider_submissions
+                WHERE submission_key = ?
+                """,
+                (submission_key,),
+            ).fetchone()
+            return rowdict(updated)
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.database.connection() as connection:
@@ -138,6 +381,9 @@ class JobRepository:
         for job in jobs:
             job.pop("settings_json", None)
             job.pop("create_request_json", None)
+            job["provider_binding"] = _provider_binding_json_value(
+                job.pop("provider_binding_json", None)
+            )
         return jobs
 
     def append_event(
@@ -1444,6 +1690,9 @@ class JobRepository:
         job = rowdict(job_row)
         job["settings"] = json.loads(job.pop("settings_json"))
         job.pop("create_request_json", None)
+        job["provider_binding"] = _provider_binding_json_value(
+            job.pop("provider_binding_json", None)
+        )
         step_rows = connection.execute(
             """
             SELECT * FROM job_steps
