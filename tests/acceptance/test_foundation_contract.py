@@ -57,7 +57,7 @@ def test_one_database_restores_job_project_and_source(tmp_path):
 
     failed_closed = job_repository.get_job(job["id"])
     assert failed_closed["status"] == "retry_wait"
-    assert failed_closed["steps"][0]["error_code"] == "PIPELINE_NOT_READY"
+    assert failed_closed["steps"][0]["error_code"] == "PROVIDER_BINDING_REQUIRED"
 
     reopened_jobs, _, _ = backend_main.create_job_runtime(
         config, runtime_paths=paths
@@ -66,7 +66,7 @@ def test_one_database_restores_job_project_and_source(tmp_path):
     reopened_job = reopened_jobs.get_job(job["id"])
 
     assert reopened_job["status"] == "retry_wait"
-    assert reopened_job["steps"][0]["error_code"] == "PIPELINE_NOT_READY"
+    assert reopened_job["steps"][0]["error_code"] == "PROVIDER_BINDING_REQUIRED"
     assert reopened_projects.get(project["id"])["sources"][0]["kind"] == "idea"
     media_extensions = {
         ".png",

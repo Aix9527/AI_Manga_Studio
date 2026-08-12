@@ -74,6 +74,7 @@ def create_job_runtime(
     config,
     runner_factory=ProductionStepRunner,
     runtime_paths: RuntimePaths | None = None,
+    production_adapter=None,
 ):
     paths = runtime_paths or RuntimePaths.from_config(config, PROJECT_ROOT)
     paths.ensure()
@@ -81,7 +82,19 @@ def create_job_runtime(
     repository = JobRepository(database)
     repository.recover_expired_leases(utcnow())
     repository.reconcile_checkpoints()
-    runner = runner_factory(repository=repository)
+    if runner_factory is ProductionStepRunner:
+        from backend.production.unavailable import UnavailableProductionAdapter
+
+        runner = runner_factory(
+            repository=repository,
+            execution_port=(
+                production_adapter
+                if production_adapter is not None
+                else UnavailableProductionAdapter()
+            ),
+        )
+    else:
+        runner = runner_factory(repository=repository)
     worker = DurableWorker(
         repository,
         runner,
