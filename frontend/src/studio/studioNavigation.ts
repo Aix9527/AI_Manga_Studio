@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ElementType } from "react";
 import {
   ApartmentOutlined,
   AppstoreOutlined,
@@ -11,7 +11,7 @@ export interface StudioNavItem {
   path: string;
   label: string;
   shortLabel: string;
-  icon: ComponentType;
+  icon: ElementType;
 }
 
 export const STUDIO_NAVIGATION: StudioNavItem[] = [
