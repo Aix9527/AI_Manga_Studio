@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, TypedDict
 from urllib.request import urlopen
 
+from backend.production.h3_unified.continuity import MOTION_CONTEXT_NODE_SIGNATURES
+
 
 class ResolvedH3Models(TypedDict):
     """The concrete local filenames chosen for the native H3 Ref2VA roles."""
@@ -109,20 +111,48 @@ def inspect_object_info(
             )
             for role, candidates in ambiguities.items()
         )
+    elif provider == "minimax_h3_control_desk":
+        checks.append(
+            _node_contract_names_check(
+                object_info,
+                "h3_control_desk",
+                "LtoJ_H3UnifiedControlDesk",
+                required_inputs={"ui_state"},
+            )
+        )
+    elif provider == "minimax_h3_motion_context":
+        check_names = {
+            "MiniMaxH3MotionContext": "h3_motion_context",
+            "MiniMaxH3MotionContextTrim": "h3_motion_context_trim",
+            "MiniMaxH3MotionContextSaveLatent": "h3_motion_context_save_latent",
+            "MiniMaxH3MotionContextLoadLatent": "h3_motion_context_load_latent",
+        }
+        checks.extend(
+            _node_contract_names_check(
+                object_info,
+                check_names[node_name],
+                node_name,
+                required_inputs=signature["required"],
+                optional_inputs=signature["optional"],
+            )
+            for node_name, signature in MOTION_CONTEXT_NODE_SIGNATURES.items()
+        )
     else:
         raise ValueError(f"Unsupported video provider: {provider}")
 
-    has_save_node = any(
-        candidate in node_names
-        for candidate in ("savevideo", "decodeandsavevideo", "vhs_videocombine")
-    )
-    checks.append(
-        PreflightCheck(
-            name="video_save_node",
-            ok=has_save_node,
-            detail="ComfyUI has a video output node" if has_save_node else "No video output node installed",
+    capability_only = provider in {"minimax_h3_control_desk", "minimax_h3_motion_context"}
+    if not capability_only:
+        has_save_node = any(
+            candidate in node_names
+            for candidate in ("savevideo", "decodeandsavevideo", "vhs_videocombine")
         )
-    )
+        checks.append(
+            PreflightCheck(
+                name="video_save_node",
+                ok=has_save_node,
+                detail="ComfyUI has a video output node" if has_save_node else "No video output node installed",
+            )
+        )
 
     missing.extend(check.name for check in checks if not check.ok)
     report = PreflightReport(
@@ -287,6 +317,33 @@ def _resolved_model_check(name: str, filename: str) -> PreflightCheck:
         ok=bool(filename),
         detail=filename or f"No installed model matches the H3 {name} role",
     )
+
+
+def _node_contract_names_check(
+    object_info: dict[str, Any],
+    check_name: str,
+    node_name: str,
+    *,
+    required_inputs: set[str],
+    optional_inputs: set[str] | None = None,
+) -> PreflightCheck:
+    node_input = object_info.get(node_name, {}).get("input", {})
+    required = node_input.get("required", {})
+    optional = node_input.get("optional", {})
+    if not isinstance(required, dict) or not isinstance(optional, dict):
+        return PreflightCheck(check_name, False, f"ComfyUI node {node_name} is unavailable")
+
+    absent_required = sorted(set(required_inputs) - set(required))
+    absent_optional = sorted(set(optional_inputs or ()) - set(optional))
+    if absent_required or absent_optional:
+        problems: list[str] = []
+        if absent_required:
+            problems.append(f"missing required inputs: {', '.join(absent_required)}")
+        if absent_optional:
+            problems.append(f"missing optional inputs: {', '.join(absent_optional)}")
+        return PreflightCheck(check_name, False, f"{node_name} has {'; '.join(problems)}")
+
+    return PreflightCheck(check_name, True, f"{node_name} exposes the expected H3 capability inputs")
 
 
 def _node_signature_check(
