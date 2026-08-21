@@ -87,6 +87,21 @@ class H3ReferenceBundle:
 
 
 @dataclass(frozen=True)
+class H3SegmentSpec:
+    index: int
+    prompt: str
+    duration_seconds: float
+    frames: int
+    fps: int
+    seed: int
+    continuity_from_index: int | None = None
+
+    @property
+    def clip_index(self) -> int:
+        return self.index + 1
+
+
+@dataclass(frozen=True)
 class H3UnifiedOptions:
     mode: H3Mode = H3Mode.FL2VA
     runtime: str = "auto"
