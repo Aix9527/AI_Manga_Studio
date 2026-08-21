@@ -15,6 +15,11 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    env:
+      AI_MANGA_NOVEL_VIDEO_CAPABILITY: ci-local-capability
+      AI_MANGA_NOVEL_PROXY_SECRET: ci-local-proxy-secret
+      AI_MANGA_BACKEND_URL: http://127.0.0.1:8000
+      AI_MANGA_VITE_PORT: "5173"
     defaults:
       run:
         working-directory: frontend
