@@ -67,6 +67,9 @@ vi.mock("@/api/jobs", () => ({
 describe("ProjectCockpit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    workspaceState.projectId = "project-a";
+    workspaceState.snapshot.project_id = "project-a";
+    workspaceState.snapshot.title = "归墟第一部";
     vi.mocked(api.uploadInput).mockResolvedValue({ path: "inputs/story.txt" });
     actions.createJob.mockResolvedValue({ id: "job-12345678" });
     parseStory.mockResolvedValue(undefined);
@@ -117,5 +120,34 @@ describe("ProjectCockpit", () => {
     }));
     expect(actions.subscribeSSE).toHaveBeenCalledWith("job-12345678");
     expect(await screen.findByText(/一键生产已启动/)).toBeInTheDocument();
+  });
+
+  it("stops a late upload from parsing or starting production after the active project changes", async () => {
+    let resolveUpload: ((value: { path: string }) => void) | undefined;
+    vi.mocked(api.uploadInput).mockImplementation(() => new Promise((resolve) => {
+      resolveUpload = resolve;
+    }));
+
+    const { container } = render(<ProjectCockpit />);
+    const input = container.querySelector('input[type="file"]');
+    expect(input).not.toBeNull();
+    const file = new File(["旧项目正文"], "old-project.txt", { type: "text/plain" });
+    Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue("旧项目正文") });
+
+    fireEvent.change(input as HTMLInputElement, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: /开始一键生成/ }));
+    await waitFor(() => expect(api.uploadInput).toHaveBeenCalledWith(file, "project-a"));
+
+    workspaceState.projectId = "project-b";
+    workspaceState.snapshot.project_id = "project-b";
+    workspaceState.snapshot.title = "新项目";
+    resolveUpload?.({ path: "inputs/old-project.txt" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(parseStory).not.toHaveBeenCalled();
+    expect(extractFromText).not.toHaveBeenCalled();
+    expect(actions.createJob).not.toHaveBeenCalled();
+    expect(actions.subscribeSSE).not.toHaveBeenCalled();
   });
 });
