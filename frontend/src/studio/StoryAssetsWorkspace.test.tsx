@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import StoryAssetsWorkspace from "@/studio/StoryAssetsWorkspace";
 import { workspaceApi } from "@/api/workspace";
@@ -65,6 +65,8 @@ describe("StoryAssetsWorkspace", () => {
     vi.mocked(workspaceApi.regenerateAsset).mockResolvedValue({ status: "accepted" } as never);
   });
 
+  afterEach(cleanup);
+
   it("loads project assets into reusable categories and exposes the selected asset inspector", async () => {
     render(<StoryAssetsWorkspace />);
 
@@ -73,8 +75,9 @@ describe("StoryAssetsWorkspace", () => {
       expect(screen.getByRole("button", { name: category })).toBeInTheDocument();
     }
 
-    expect(await screen.findByText("苏晚")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "苏晚" })).toBeInTheDocument();
     expect(screen.getByText(/character_ref · v2 · passed/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "苏晚", level: 3 })).toBeInTheDocument();
     expect(screen.getByDisplayValue("character_ref")).toBeInTheDocument();
     expect(screen.getByDisplayValue("v2")).toBeInTheDocument();
     expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a");
@@ -82,7 +85,7 @@ describe("StoryAssetsWorkspace", () => {
 
   it("regenerates the selected asset and switches category views", async () => {
     render(<StoryAssetsWorkspace />);
-    await screen.findByText("苏晚");
+    await screen.findByRole("img", { name: "苏晚" });
 
     fireEvent.click(screen.getByRole("button", { name: "重新生成此资产" }));
     await waitFor(() => expect(workspaceApi.regenerateAsset).toHaveBeenCalledWith("project-a", 1));
