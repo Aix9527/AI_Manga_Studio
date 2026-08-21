@@ -1,4 +1,4 @@
-name: Frontend Dependency Upgrade Probe
+name: Persist Verified Frontend Dependencies
 
 on:
   push:
@@ -8,11 +8,16 @@ on:
       - ".github/workflows/dependency-upgrade-probe.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  probe:
+  persist:
     runs-on: ubuntu-latest
+    env:
+      AI_MANGA_NOVEL_VIDEO_CAPABILITY: ci-local-capability
+      AI_MANGA_NOVEL_PROXY_SECRET: ci-local-proxy-secret
+      AI_MANGA_BACKEND_URL: http://127.0.0.1:8000
+      AI_MANGA_VITE_PORT: "5173"
     defaults:
       run:
         working-directory: frontend
@@ -23,20 +28,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Generate secure dependency set
+      - name: Generate verified dependency set
         run: |
           npm install react-router-dom@7.18.0
-          npm install --save-dev vite@8.2.2 vitest@4.1.11 @vitejs/plugin-react@latest
-          npm audit fix || true
-      - name: Post-upgrade audit
-        run: npm audit --json || true
-      - name: Emit upgraded manifests
+          npm install --save-dev vite@8.2.2 vitest@4.1.11 @vitejs/plugin-react@6.1.0
+          npm audit fix
+          npm audit
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+      - name: Commit verified manifests
+        working-directory: .
         run: |
-          echo "PACKAGE_JSON_GZIP_BASE64_BEGIN"
-          gzip -c package.json | base64 -w0
-          echo
-          echo "PACKAGE_JSON_GZIP_BASE64_END"
-          echo "PACKAGE_LOCK_GZIP_BASE64_BEGIN"
-          gzip -c package-lock.json | base64 -w0
-          echo
-          echo "PACKAGE_LOCK_GZIP_BASE64_END"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package.json frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "No dependency manifest changes to persist."
+            exit 0
+          fi
+          git commit -m "build: upgrade frontend dependencies"
+          git push origin HEAD:feat/unified-local-studio
