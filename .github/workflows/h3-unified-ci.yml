@@ -52,8 +52,8 @@ jobs:
             tests/production/test_h3_segment_planner.py \
             tests/production/test_h3_control_state.py \
             tests/production/test_h3_unified_workflow_builder.py \
+            tests/production/test_h3_unified_preflight.py \
             tests/production/test_h3_unified_provider.py \
-            tests/production/test_preflight.py \
             tests/video/test_runtime_h3_options.py; do
             if [ -f "$file" ]; then
               files+=("$file")
