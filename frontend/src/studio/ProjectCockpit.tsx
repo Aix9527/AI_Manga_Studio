@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AudioOutlined,
   FileTextOutlined,
@@ -37,6 +37,11 @@ function stageStatus(snapshot: ReturnType<typeof useWorkspaceStore.getState>["sn
   return { status: "waiting" as const, progress: 0 };
 }
 
+function currentWorkspaceProjectId(): string | null {
+  const state = useWorkspaceStore.getState();
+  return state.snapshot?.project_id ?? state.projectId;
+}
+
 const ProjectCockpit: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const workspaceProjectId = useWorkspaceStore((state) => state.projectId);
@@ -47,7 +52,15 @@ const ProjectCockpit: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [healthText, setHealthText] = useState<string>("");
+  const oneClickRequest = useRef(0);
   const projectId = snapshot?.project_id || workspaceProjectId || "default";
+
+  useEffect(() => {
+    oneClickRequest.current += 1;
+    setUploadedPath(null);
+    setBusy(false);
+    setMessage(null);
+  }, [projectId]);
 
   const recentArtifacts = useMemo(() => jobStore.recentIds
     .map((id) => jobStore.jobs.get(id))
@@ -56,18 +69,26 @@ const ProjectCockpit: React.FC = () => {
     .filter((artifact) => Boolean(artifact.media_url))
     .slice(0, 9), [jobStore.jobs, jobStore.recentIds]);
 
-  const prepareInput = async (): Promise<string | null> => {
+  const prepareInput = async (
+    requestProjectId: string,
+    isCurrentRequest: () => boolean,
+  ): Promise<string | null> => {
+    if (!isCurrentRequest()) return null;
     if (uploadedPath) return uploadedPath;
     if (!file) {
       setMessage("请选择小说或剧本文件");
       return null;
     }
     const text = await file.text();
-    const uploaded = await api.uploadInput(file, projectId);
-    await parseStory(text, projectId);
+    if (!isCurrentRequest()) return null;
+    const uploaded = await api.uploadInput(file, requestProjectId);
+    if (!isCurrentRequest()) return null;
+    await parseStory(text, requestProjectId);
+    if (!isCurrentRequest()) return null;
     const storyError = useStoryStore.getState().parseError;
     if (storyError) throw new Error(storyError);
-    await useCharacterStore.getState().extractFromText({ text, novel_id: projectId });
+    await useCharacterStore.getState().extractFromText({ text, novel_id: requestProjectId });
+    if (!isCurrentRequest()) return null;
     const characterError = useCharacterStore.getState().error;
     if (characterError) throw new Error(characterError);
     setUploadedPath(uploaded.path);
@@ -75,13 +96,19 @@ const ProjectCockpit: React.FC = () => {
   };
 
   const startOneClick = async () => {
+    const requestToken = ++oneClickRequest.current;
+    const requestProjectId = projectId;
+    const isCurrentRequest = () => (
+      requestToken === oneClickRequest.current
+      && currentWorkspaceProjectId() === requestProjectId
+    );
     setBusy(true);
     setMessage(null);
     try {
-      const inputPath = await prepareInput();
-      if (!inputPath) return;
+      const inputPath = await prepareInput(requestProjectId, isCurrentRequest);
+      if (!inputPath || !isCurrentRequest()) return;
       const job = await jobStoreActions().createJob({
-        project_id: projectId,
+        project_id: requestProjectId,
         input_path: inputPath,
         mode: "automatic",
         shot_duration: 5,
@@ -90,12 +117,13 @@ const ProjectCockpit: React.FC = () => {
         fps: 24,
         options: { style: "anime", local_first: true },
       });
+      if (!isCurrentRequest()) return;
       jobStoreActions().subscribeSSE(job.id);
       setMessage(`一键生产已启动 · 任务 ${job.id.slice(0, 8)}`);
     } catch (error) {
-      setMessage(userMessage(error));
+      if (isCurrentRequest()) setMessage(userMessage(error));
     } finally {
-      setBusy(false);
+      if (isCurrentRequest()) setBusy(false);
     }
   };
 
@@ -142,7 +170,17 @@ const ProjectCockpit: React.FC = () => {
 
         <div className="one-click-zone">
           <label className="file-drop-control">
-            <input type="file" accept=".txt,.md,.xml,.fountain" onChange={(event) => { setFile(event.target.files?.[0] || null); setUploadedPath(null); }} />
+            <input
+              type="file"
+              accept=".txt,.md,.xml,.fountain"
+              onChange={(event) => {
+                oneClickRequest.current += 1;
+                setFile(event.target.files?.[0] || null);
+                setUploadedPath(null);
+                setBusy(false);
+                setMessage(null);
+              }}
+            />
             <span>{file ? file.name : "选择小说 / 剧本文件"}</span>
           </label>
           <button type="button" className="studio-primary-button one-click-button" disabled={busy} onClick={() => void startOneClick()}>
