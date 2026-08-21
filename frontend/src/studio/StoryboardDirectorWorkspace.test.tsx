@@ -5,26 +5,30 @@ import { describe, expect, it, vi } from "vitest";
 import StoryboardDirectorWorkspace from "@/studio/StoryboardDirectorWorkspace";
 import { workspaceApi } from "@/api/workspace";
 
-const workspaceState = {
-  projectId: "project-a",
-  snapshot: {
-    project_id: "project-a",
-    title: "《归墟》第一部",
-    source_path: "D:/AI_Manga_Projects/归墟",
-    version: "v0.8",
-    progress: 0.68,
-    pending_reviews: 0,
-    active_jobs: 1,
-    estimated_minutes: 12,
-    stages: [],
-    system_health: { database: "ok" },
-  },
-};
+const { mockedWorkspaceStore } = vi.hoisted(() => {
+  const workspaceState = {
+    projectId: "project-a",
+    snapshot: {
+      project_id: "project-a",
+      title: "《归墟》第一部",
+      source_path: "D:/AI_Manga_Projects/归墟",
+      version: "v0.8",
+      progress: 0.68,
+      pending_reviews: 0,
+      active_jobs: 1,
+      estimated_minutes: 12,
+      stages: [],
+      system_health: { database: "ok" },
+    },
+  };
 
-const mockedWorkspaceStore = Object.assign(
-  (selector: (state: typeof workspaceState) => unknown) => selector(workspaceState),
-  { getState: () => workspaceState },
-);
+  const mockedWorkspaceStore = Object.assign(
+    (selector: (state: typeof workspaceState) => unknown) => selector(workspaceState),
+    { getState: () => workspaceState },
+  );
+
+  return { mockedWorkspaceStore };
+});
 
 vi.mock("@/state/workspaceStore", () => ({ useWorkspaceStore: mockedWorkspaceStore }));
 vi.mock("@/api/workspace", () => ({
