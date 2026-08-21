@@ -32,7 +32,7 @@ function assetTitle(asset: ProjectAsset): string {
 const StoryAssetsWorkspace: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const projectId = snapshot?.project_id || useWorkspaceStore.getState().projectId || "default";
-  const { jobs } = useJobStore();
+  const { jobs, refreshJob } = useJobStore();
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [category, setCategory] = useState<CategoryKey>("character");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -67,9 +67,10 @@ const StoryAssetsWorkspace: React.FC = () => {
       && firstReviewStep?.id === selected.step_id,
   );
 
-  const regenerateSelected = () => {
+  const regenerateSelected = async () => {
     if (!selected || !canRegenerate) return;
-    void workspaceApi.regenerateAsset(projectId, selected.id);
+    await workspaceApi.regenerateAsset(projectId, selected.id);
+    await refreshJob(selected.job_id);
   };
 
   return (
@@ -154,7 +155,7 @@ const StoryAssetsWorkspace: React.FC = () => {
               <div className="inspector-field"><label>质检状态</label><input value={selected.quality_status || "未质检"} readOnly /></div>
             </div>
             <div className="inspector-section">
-              <button type="button" className="studio-secondary-button" disabled={!canRegenerate} onClick={regenerateSelected}>重新生成此资产</button>
+              <button type="button" className="studio-secondary-button" disabled={!canRegenerate} onClick={() => void regenerateSelected()}>重新生成此资产</button>
             </div>
           </>
         ) : <div className="studio-empty">选择一个资产查看详情</div>}
