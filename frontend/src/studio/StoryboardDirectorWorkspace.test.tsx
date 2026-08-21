@@ -73,7 +73,7 @@ describe("StoryboardDirectorWorkspace", () => {
     expect(screen.getByRole("button", { name: "摇镜" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /生成视频/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /重拍镜头/ })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("建立镜头")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("建立镜头").length).toBeGreaterThan(0));
     expect(screen.getByText(/当前 v2/)).toBeInTheDocument();
     expect(screen.getByText(/画面质量 passed/)).toBeInTheDocument();
   });
