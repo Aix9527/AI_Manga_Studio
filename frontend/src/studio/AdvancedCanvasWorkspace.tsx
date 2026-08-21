@@ -28,11 +28,13 @@ const LIBRARY = [
   ["导出", ["成片导出", "工程打包"]],
 ] as const;
 
+type ProductionNode = Node<ProductionNodeData>;
+
 const AdvancedCanvasWorkspace: React.FC = () => {
-  const [selectedNode, setSelectedNode] = useState<Node<ProductionNodeData> | null>(DEFAULT_PRODUCTION_NODES[5]);
+  const [selectedNode, setSelectedNode] = useState<ProductionNode | null>(DEFAULT_PRODUCTION_NODES[5] ?? null);
   const [notice, setNotice] = useState("专业精修 / 本地可控 / 节点可回放");
 
-  const selectNode: NodeMouseHandler<Node<ProductionNodeData>> = useCallback((_event, node) => {
+  const selectNode: NodeMouseHandler<ProductionNode> = useCallback((_event, node) => {
     setSelectedNode(node);
   }, []);
 
@@ -59,7 +61,7 @@ const AdvancedCanvasWorkspace: React.FC = () => {
           </div>
         </header>
         <div className="canvas-stage" aria-label="高级生产节点画布">
-          <ReactFlow<ProductionNodeData>
+          <ReactFlow<ProductionNode>
             nodes={DEFAULT_PRODUCTION_NODES}
             edges={DEFAULT_PRODUCTION_EDGES}
             onNodeClick={selectNode}
