@@ -49,6 +49,11 @@ const JOB_STATUS_LABELS: Record<JobStatus, string> = {
 
 const ACTIVE_JOB_STATUSES = new Set<JobStatus>(["queued", "running", "waiting_review", "retry_wait"]);
 
+function currentWorkspaceProjectId(): string | null {
+  const state = useWorkspaceStore.getState();
+  return state.snapshot?.project_id ?? state.projectId;
+}
+
 export const ProjectOverview: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const workspaceProjectId = useWorkspaceStore((state) => state.projectId);
@@ -73,6 +78,8 @@ export const ProjectOverview: React.FC = () => {
     setHealthResult(null);
     setImporting(false);
     setImportResult(null);
+    setUploadedPath(null);
+    setJobResult(null);
     useStoryStore.getState().invalidateRequests();
     return () => {
       healthRequest.current += 1;
@@ -125,30 +132,34 @@ export const ProjectOverview: React.FC = () => {
     }
     const requestToken = ++importRequest.current;
     const importProjectId = snapshot.project_id;
+    const isCurrentImport = () => (
+      requestToken === importRequest.current
+      && currentWorkspaceProjectId() === importProjectId
+    );
     setImporting(true);
     setImportResult(null);
     try {
       const text = await file.text();
-      if (requestToken !== importRequest.current) return;
+      if (!isCurrentImport()) return;
       const uploadResp = await api.uploadInput(file, importProjectId);
-      if (requestToken !== importRequest.current) return;
+      if (!isCurrentImport()) return;
       setUploadedPath(uploadResp.path);
       await parseStory(text, importProjectId);
-      if (requestToken !== importRequest.current) return;
+      if (!isCurrentImport()) return;
       const storyError = useStoryStore.getState().parseError;
       if (storyError) throw new Error(storyError);
       setImportResult("故事解析完成，正在提取角色…");
       await useCharacterStore.getState().extractFromText({ text, novel_id: importProjectId });
-      if (requestToken !== importRequest.current) return;
+      if (!isCurrentImport()) return;
       const charError = useCharacterStore.getState().error;
       if (charError) throw new Error(charError);
       const charCount = useCharacterStore.getState().characters.length;
       setImportResult(`小说已上传并完成解析，已提取 ${charCount} 个角色`);
     } catch (error) {
-      if (requestToken !== importRequest.current) return;
+      if (!isCurrentImport()) return;
       setImportResult(userMessage(error));
     } finally {
-      if (requestToken === importRequest.current) setImporting(false);
+      if (isCurrentImport()) setImporting(false);
     }
   };
 
