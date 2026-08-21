@@ -139,6 +139,7 @@ describe("StoryAssetsWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "重新生成此资产" }));
     await waitFor(() => expect(workspaceApi.regenerateAsset).toHaveBeenCalledWith("project-a", 1));
+    await waitFor(() => expect(jobState.refreshJob).toHaveBeenCalledWith("job-a"));
 
     fireEvent.click(screen.getByRole("button", { name: "场景" }));
     expect(screen.getByText(/当前类别暂无资产/)).toBeInTheDocument();
