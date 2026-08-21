@@ -1,0 +1,66 @@
+name: Unified H3 Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "backend/production/h3_unified/**"
+      - "backend/production/providers.py"
+      - "backend/production/preflight.py"
+      - "backend/production/dual_engine_provider.py"
+      - "backend/video/runtime.py"
+      - "tests/production/test_h3_*.py"
+      - "tests/video/test_runtime_h3_options.py"
+      - ".github/workflows/h3-unified-ci.yml"
+  push:
+    branches:
+      - "feat/h3-unified-runtime"
+    paths:
+      - "backend/production/h3_unified/**"
+      - "backend/production/providers.py"
+      - "backend/production/preflight.py"
+      - "backend/production/dual_engine_provider.py"
+      - "backend/video/runtime.py"
+      - "tests/production/test_h3_*.py"
+      - "tests/video/test_runtime_h3_options.py"
+      - ".github/workflows/h3-unified-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  h3-unified:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install unit-test dependencies
+        run: python -m pip install --upgrade pytest
+      - name: Compile unified runtime
+        run: |
+          if [ -d backend/production/h3_unified ]; then
+            python -m compileall -q backend/production/h3_unified
+          fi
+      - name: Run H3 unified unit tests
+        shell: bash
+        run: |
+          files=()
+          for file in \
+            tests/production/test_h3_unified_contracts.py \
+            tests/production/test_h3_segment_planner.py \
+            tests/production/test_h3_control_state.py \
+            tests/production/test_h3_unified_workflow_builder.py \
+            tests/production/test_h3_unified_provider.py \
+            tests/production/test_preflight.py \
+            tests/video/test_runtime_h3_options.py; do
+            if [ -f "$file" ]; then
+              files+=("$file")
+            fi
+          done
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No H3 unified tests found"
+            exit 1
+          fi
+          python -m pytest -q "${files[@]}"
