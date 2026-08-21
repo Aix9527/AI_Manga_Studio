@@ -1,0 +1,47 @@
+name: Unified Studio Frontend CI
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/unified-studio-ci.yml"
+  push:
+    branches:
+      - "feat/unified-local-studio"
+    paths:
+      - "frontend/**"
+      - ".github/workflows/unified-studio-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    env:
+      AI_MANGA_NOVEL_VIDEO_CAPABILITY: ci-local-capability
+      AI_MANGA_NOVEL_PROXY_SECRET: ci-local-proxy-secret
+      AI_MANGA_BACKEND_URL: http://127.0.0.1:8000
+      AI_MANGA_VITE_PORT: "5173"
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit dependencies
+        run: npm audit
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build

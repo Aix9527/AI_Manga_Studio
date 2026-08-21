@@ -1,12 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
-import crypto from "crypto";
+import path from "node:path";
+import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 const localCapability = process.env.AI_MANGA_NOVEL_VIDEO_CAPABILITY;
 const localBackendUrl = process.env.AI_MANGA_BACKEND_URL ?? "http://127.0.0.1:8000";
 const localVitePort = Number(process.env.AI_MANGA_VITE_PORT ?? "5173");
 const localProxySecret = process.env.AI_MANGA_NOVEL_PROXY_SECRET;
+const configDirectory = path.dirname(fileURLToPath(import.meta.url));
 if (!localCapability) {
   throw new Error("AI_MANGA_NOVEL_VIDEO_CAPABILITY must be supplied by run.bat");
 }
@@ -18,7 +20,7 @@ export default defineConfig({
   plugins: [react(), novelVideoProxyBoundary()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(configDirectory, "./src"),
     },
   },
   server: {

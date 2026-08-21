@@ -120,6 +120,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   jobState.jobs = [];
   useWorkspaceStore.setState({
