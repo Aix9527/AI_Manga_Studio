@@ -106,6 +106,15 @@ class H3UnifiedOptions:
     mode: H3Mode = H3Mode.FL2VA
     runtime: str = "auto"
     allow_fallback: bool = True
+    duration_seconds: float = 5.0
+    steps: int = 12
+    seed: int = -1
+    aspect_ratio: str = "9:16 竖屏"
+    resolution: str = "480p"
+    gpu_profile: str = "自动检测GPU"
+    model_profile: str = "standard"
+    reference_quality: str = "match"
+    scheduler: str = "官方基准（推荐先测）"
 
     def validate_inputs(
         self,
