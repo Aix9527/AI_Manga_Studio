@@ -3,6 +3,7 @@ import { PlayCircleOutlined, ReloadOutlined, SafetyCertificateOutlined } from "@
 
 import { userMessage } from "@/api/client";
 import { workspaceApi } from "@/api/workspace";
+import { useJobStore } from "@/state/jobStore";
 import { useWorkspaceStore } from "@/state/workspaceStore";
 import type { ProjectAsset } from "@/workbench/types";
 
@@ -33,6 +34,7 @@ const fallbackShots: ShotView[] = Array.from({ length: 8 }).map((_, index) => ({
 const StoryboardDirectorWorkspace: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const projectId = snapshot?.project_id || useWorkspaceStore.getState().projectId || "default";
+  const { jobs, reviewJob, refreshJob } = useJobStore();
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [selectedId, setSelectedId] = useState<string>(fallbackShots[0].id);
   const [camera, setCamera] = useState<(typeof CAMERA)[number]>("推镜");
@@ -54,14 +56,41 @@ const StoryboardDirectorWorkspace: React.FC = () => {
   const selected = shots.find((shot) => shot.id === selectedId) ?? shots[0];
   const selectedAsset = selected?.asset;
   const totalDuration = shots.reduce((sum, shot) => sum + shot.duration, 0);
+  const selectedJob = selectedAsset?.job_id ? jobs.get(selectedAsset.job_id) : undefined;
+  const selectedReviewStep = selectedAsset?.step_id
+    ? selectedJob?.steps.find((step) => step.id === selectedAsset.step_id)
+    : undefined;
+  const canReviewSelected = Boolean(
+    selectedAsset
+    && selectedJob?.status === "waiting_review"
+    && selectedReviewStep?.status === "waiting_review",
+  );
+
+  const continueToVideo = async () => {
+    if (!selectedAsset || !canReviewSelected) {
+      setMessage("当前镜头不是待审核关键帧，无法继续生成视频。");
+      return;
+    }
+    try {
+      await reviewJob(
+        selectedAsset.job_id,
+        "approve",
+        `导演台批准 ${selectedAsset.shot_id || selected.title} 关键帧，继续后续视频生成`,
+      );
+      setMessage(`已批准${selected.title}，生产将继续到视频生成`);
+    } catch (error) {
+      setMessage(userMessage(error));
+    }
+  };
 
   const regenerate = async () => {
-    if (!selectedAsset) {
-      setMessage("当前是尚未生成的镜头草案；启动生成后会创建可重拍版本。");
+    if (!selectedAsset || !canReviewSelected) {
+      setMessage(selectedAsset ? "当前镜头不是待审核版本，无法重拍。" : "当前是尚未生成的镜头草案；启动生成后会创建可重拍版本。");
       return;
     }
     try {
       await workspaceApi.regenerateAsset(projectId, selectedAsset.id);
+      await refreshJob(selectedAsset.job_id);
       setMessage(`已为 ${selected.title} 创建重新生成任务`);
     } catch (error) {
       setMessage(userMessage(error));
@@ -96,8 +125,8 @@ const StoryboardDirectorWorkspace: React.FC = () => {
             <p>场景 01 · {shots.length} 镜头 · 约 {totalDuration} 秒 · 本地导演控制</p>
           </div>
           <div className="asset-tabs">
-            <button type="button" className="studio-secondary-button" onClick={() => void regenerate()}><ReloadOutlined /> 重拍镜头</button>
-            <button type="button" className="studio-primary-button" onClick={() => void regenerate()}><PlayCircleOutlined /> 生成视频</button>
+            <button type="button" className="studio-secondary-button" disabled={!canReviewSelected} onClick={() => void regenerate()}><ReloadOutlined /> 重拍镜头</button>
+            <button type="button" className="studio-primary-button" disabled={!canReviewSelected} onClick={() => void continueToVideo()}><PlayCircleOutlined /> 生成视频</button>
           </div>
         </header>
 
