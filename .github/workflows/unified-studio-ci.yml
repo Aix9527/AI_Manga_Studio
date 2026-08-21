@@ -37,27 +37,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Upgrade vulnerable direct dependencies
-        run: |
-          npm install react-router-dom@7.18.0
-          npm install --save-dev vite@8.2.2 vitest@4.1.11 @vitejs/plugin-react@latest
-          npm audit fix || true
-      - name: Audit upgraded dependencies
-        run: npm audit --json || true
+      - name: Audit dependencies
+        run: npm audit
       - name: Typecheck
         run: npm run typecheck
       - name: Tests
         run: npm test -- --run
       - name: Build
         run: npm run build
-      - name: Emit upgraded manifests
-        if: always()
-        run: |
-          echo "PACKAGE_JSON_GZIP_BASE64_BEGIN"
-          gzip -c package.json | base64 -w0
-          echo
-          echo "PACKAGE_JSON_GZIP_BASE64_END"
-          echo "PACKAGE_LOCK_GZIP_BASE64_BEGIN"
-          gzip -c package-lock.json | base64 -w0
-          echo
-          echo "PACKAGE_LOCK_GZIP_BASE64_END"
