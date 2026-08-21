@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import { userMessage } from "@/api/client";
 import { workspaceApi } from "@/api/workspace";
+import { useJobStore } from "@/state/jobStore";
 import { useWorkspaceStore } from "@/state/workspaceStore";
 import type { ProjectAsset } from "@/workbench/types";
 
@@ -31,6 +32,7 @@ function assetTitle(asset: ProjectAsset): string {
 const StoryAssetsWorkspace: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const projectId = snapshot?.project_id || useWorkspaceStore.getState().projectId || "default";
+  const { jobs } = useJobStore();
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [category, setCategory] = useState<CategoryKey>("character");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -57,6 +59,18 @@ const StoryAssetsWorkspace: React.FC = () => {
     [assets, category],
   );
   const selected = assets.find((asset) => asset.id === selectedId) ?? null;
+  const selectedJob = selected?.job_id ? jobs.get(selected.job_id) : undefined;
+  const firstReviewStep = selectedJob?.steps.find((step) => step.status === "waiting_review");
+  const canRegenerate = Boolean(
+    selected?.active
+      && selectedJob?.status === "waiting_review"
+      && firstReviewStep?.id === selected.step_id,
+  );
+
+  const regenerateSelected = () => {
+    if (!selected || !canRegenerate) return;
+    void workspaceApi.regenerateAsset(projectId, selected.id);
+  };
 
   return (
     <div className="studio-workspace studio-three-pane">
@@ -140,7 +154,7 @@ const StoryAssetsWorkspace: React.FC = () => {
               <div className="inspector-field"><label>质检状态</label><input value={selected.quality_status || "未质检"} readOnly /></div>
             </div>
             <div className="inspector-section">
-              <button type="button" className="studio-secondary-button" onClick={() => void workspaceApi.regenerateAsset(projectId, selected.id)}>重新生成此资产</button>
+              <button type="button" className="studio-secondary-button" disabled={!canRegenerate} onClick={regenerateSelected}>重新生成此资产</button>
             </div>
           </>
         ) : <div className="studio-empty">选择一个资产查看详情</div>}
