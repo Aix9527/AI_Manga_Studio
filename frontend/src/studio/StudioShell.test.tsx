@@ -5,34 +5,38 @@ import { describe, expect, it, vi } from "vitest";
 
 import StudioShell from "@/studio/StudioShell";
 
-const workspaceState = {
-  projectId: "project-a",
-  snapshot: {
-    project_id: "project-a",
-    title: "《归墟》第一部",
-    source_path: "D:/AI_Manga_Projects/归墟",
-    version: "v0.8",
-    progress: 0.68,
-    pending_reviews: 0,
-    active_jobs: 1,
-    estimated_minutes: 12,
-    stages: [],
-    system_health: { database: "ok" },
-  },
-  loading: false,
-  loadWorkspace: vi.fn().mockResolvedValue(undefined),
-};
+const { workspaceState, mockedWorkspaceStore, jobActions } = vi.hoisted(() => {
+  const workspaceState = {
+    projectId: "project-a",
+    snapshot: {
+      project_id: "project-a",
+      title: "《归墟》第一部",
+      source_path: "D:/AI_Manga_Projects/归墟",
+      version: "v0.8",
+      progress: 0.68,
+      pending_reviews: 0,
+      active_jobs: 1,
+      estimated_minutes: 12,
+      stages: [],
+      system_health: { database: "ok" },
+    },
+    loading: false,
+    loadWorkspace: vi.fn().mockResolvedValue(undefined),
+  };
 
-const mockedWorkspaceStore = Object.assign(
-  (selector: (state: typeof workspaceState) => unknown) => selector(workspaceState),
-  { getState: () => workspaceState },
-);
+  const mockedWorkspaceStore = Object.assign(
+    (selector: (state: typeof workspaceState) => unknown) => selector(workspaceState),
+    { getState: () => workspaceState },
+  );
 
-const jobActions = {
-  resetProjectJobs: vi.fn(),
-  loadProjectJobs: vi.fn().mockResolvedValue([]),
-  subscribeActiveJobs: vi.fn(() => () => undefined),
-};
+  const jobActions = {
+    resetProjectJobs: vi.fn(),
+    loadProjectJobs: vi.fn().mockResolvedValue([]),
+    subscribeActiveJobs: vi.fn(() => () => undefined),
+  };
+
+  return { workspaceState, mockedWorkspaceStore, jobActions };
+});
 
 vi.mock("@/state/workspaceStore", () => ({ useWorkspaceStore: mockedWorkspaceStore }));
 vi.mock("@/state/projectStore", () => ({
