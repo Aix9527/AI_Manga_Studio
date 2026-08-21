@@ -1,0 +1,14 @@
+# 镜头语言 v1
+rules:
+  environment: [aerial_wide, slow_push, establish_before_character]
+  dialogue:    [medium_closeup, shallow_dof, slow_push, two_shot_for_interaction]
+  emotion:     [extreme_closeup, micro_expression, slow_push]
+  action:      [tracking, medium_motion, no_handheld_shake, character_centered]
+  exploration: [macro_push, cinematic_dolly, controlled_parallax]
+  world:       [epic_wide, slow_crane, aerial_slow, scale_convey]
+
+transition:
+  environment_to_environment: "fade 0.2s"
+  dialogue: "hard cut"
+  action: "hard cut"
+  climax: "match cut (fade 0.2s 近似)"

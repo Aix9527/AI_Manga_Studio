@@ -1,0 +1,32 @@
+{
+  "scene_id": "scene_005",
+  "source_shot_id": "shot_05",
+  "shot": {
+    "id": "shot_05",
+    "scene_id": "scene_005",
+    "index": 4,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "tracking",
+    "description": "走廊尽头传来了脚步声。 方觉明推门进来时，苏晚刚放下笔。七十岁的老人快步走到她面前，反手关门，落锁，拉下百叶窗。他的驼色羊毛衫上沾着室外的雾气，左手食指在裤缝上无意识地快速敲击。 苏晚的目光在他脸上停留了不到两秒——瞳孔轻微放大，额角有细密的冷汗。这些体征指向一种她从未在这个老人身上见过的状态：被压到极致的恐惧。 她伸手拔掉了网线接口。 “数据传上去没有？” “只跑了本地比对——” “好。”方觉明替她拔掉了主服务器的网线接口。然后他转过身，双手握住苏晚的肩膀，力气大得不像一个七十岁的老人。",
+    "action": "走廊尽头传来了脚步声。 方觉明推门进来时，苏晚刚放下笔。七十岁的老人快步走到她面前，反手关门，落锁，拉下百叶窗。他的驼色羊毛衫上沾着室外的雾气，左手食指在裤缝上",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 3.0,
+    "character_ids": [
+      "suwan",
+      "fangjueming"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "角色苏晚的视觉设定",
+      "fangjueming": "角色方觉明的视觉设定"
+    },
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

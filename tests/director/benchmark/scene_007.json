@@ -1,0 +1,30 @@
+{
+  "scene_id": "scene_007",
+  "source_shot_id": "shot_07",
+  "shot": {
+    "id": "shot_07",
+    "scene_id": "scene_007",
+    "index": 6,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "tracking",
+    "description": "“他们不会杀你。但他们会带走你。然后，你的女儿就是唯一剩下的纯血样本了。” 苏晚转身就跑。 身后传来三声被消音器压住的枪响。 她把哭声咬在舌根下面，推开紧急出口的铁门。雾霾将她吞没。 魔都，凌晨四点四十二分。 手机第五次振动。来电显示：妈妈家。 “苏老师——”是保姆陈姐的声音，发抖，发紧，“门被砸开了。他们带着枪。小满——小满被——” 电流音。重物落地声。然后一个男人的声音取代了陈姐。年轻，磁性，带着一丝不动声色的优雅。",
+    "action": "他们不会杀你。但他们会带走你。然后，你的女儿就是唯一剩下的纯血样本了。 苏晚转身就跑。 身后传来三声被消音器压住的枪响。 她把哭声咬在舌根下面，推开紧急出口的铁",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 3.0,
+    "character_ids": [
+      "suwan"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "角色苏晚的视觉设定"
+    },
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

@@ -1,0 +1,6 @@
+# FLF2V 衔接（v0.7 冻结）
+name: flf2v
+rule: "上一镜末帧作为下一镜首帧（end frame -> next start）"
+usage: "同角色连续动作：行走/开门/转身/镜头推进"
+constraint: "人物位置变化>30% 时禁用（防身体拉伸/背景融合/手脚异常）"
+matrix: projects/归墟觉醒·天倾/production_bible/continuity_matrix.yaml

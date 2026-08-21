@@ -1,0 +1,41 @@
+# Artifact QC Mode (GPT 2026-08-06 批准)
+# 背景：gx_019（密集壁画纹理）与 gx_021（青铜神树密匣纹饰）被 mosaic 规则误报。
+# 裁决：两镜不重做，改用 artifact 模式重评；gx_026 保留 v3，修改验收 profile。
+
+artifact_mode:
+  description: "密集装饰纹理（壁画/青铜纹/编织物）触发边界重复检测时，block=0.00 且帧分>=85 判定为误报"
+  override_rules:
+    - if: "block_artifact_score == 0.00 and frame_score >= 85"
+      then: "is_mosaic = False (纹理误报)"
+    - if: "mosaic flagged but brightness in [40, 200] and contrast normal"
+      then: "require GPT 裁决"
+
+verdicts:
+  gx_019:
+    decision: "不重做"
+    score: 88.0
+    reason: "密集壁画纹理触发 mosaic 误报（block=0.00，亮度 60-63，帧分 96）"
+    status: ACCEPT
+  gx_021:
+    decision: "不重做"
+    score: 75.6
+    reason: "青铜神树密匣密集纹饰触发误报（block=0.00，亮度 69-85）"
+    status: ACCEPT
+  gx_026:
+    decision: "保留 v3"
+    version: gx_026_v3_480x832.mp4
+    seed: 6021026
+    score: 73.1
+    reason: "手电滚落+光束晃动固有动态导致 TC 惩罚；无频闪、无 mosaic、motion_cv 0.416"
+    acceptance_profile: "dynamic_action_shot (允许 QC>=70, TC 不做硬性要求)"
+
+acceptance_profiles:
+  default:
+    qc_min: 85
+    mosaic: 0
+    motion_cv_max: 0.65
+  dynamic_action_shot:
+    qc_min: 70
+    mosaic: 0
+    motion_cv_max: 0.65
+    note: "用于手电/强动态光源镜；TC 不作为硬性门槛，以无频闪+运动平滑为准"

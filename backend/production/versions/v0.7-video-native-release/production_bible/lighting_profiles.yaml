@@ -1,0 +1,12 @@
+# 灯光模板 v1
+profiles:
+  lab_night:    { key: cold_white_screen_glow, fill: low, mood: sterile_cold }
+  city_dawn:    { key: neon_mix, fill: rain_reflection, mood: lonely_determined }
+  car_night:    { key: dashboard_light, fill: none, mood: intimate_mystery }
+  corridor:     { key: flashlight_beam, fill: none, mood: claustrophobic }
+  mural_room:   { key: flashlight_raking, fill: faint_blue, mood: ancient_dread }
+  energy_core:  { key: golden_light, fill: blue_ambient, mood: sacred_power }
+
+night_rule:
+  min_luminance: 60
+  key_light_required: true

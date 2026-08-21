@@ -1,0 +1,26 @@
+{
+  "scene_id": "scene_004",
+  "source_shot_id": "shot_04",
+  "shot": {
+    "id": "shot_04",
+    "scene_id": "scene_004",
+    "index": 3,
+    "shot_type": "close-up",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "屏幕上那组基因序列，来自三天前从蜀地运来的青铜神树残片。三星堆新一期的抢救性发掘又挖出了东西，考古所的老同学把附着在青铜器表面的远古生物组织样本寄给了她，附言只有一句话：“这东西不对劲，你看看。” 她看了。用了三个通宵。 一千三百一十四个碱基对。比对结果：与人类基因组中一段被标记为“功能未知”的非编码DNA片段匹配度达百分之九十九以上。 学界管这些片段叫“垃圾DNA”。 自检结果：匹配度百分之九十九点七。",
+    "action": "屏幕上那组基因序列，来自三天前从蜀地运来的青铜神树残片。三星堆新一期的抢救性发掘又挖出了东西，考古所的老同学把附着在青铜器表面的远古生物组织样本寄给了她，附言只",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 4.0,
+    "character_ids": []
+  },
+  "section_context": {
+    "character_state": {},
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

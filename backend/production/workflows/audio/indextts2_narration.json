@@ -1,0 +1,13 @@
+{
+  "type": "voice",
+  "provider": "indextts2",
+  "task": "narration",
+  "params": {
+    "text": "",
+    "style": "documentary",
+    "emotion": "epic",
+    "speed": 0.95,
+    "sample_rate": 24000
+  },
+  "fallback": ["cosyvoice3", "cosyvoice"]
+}

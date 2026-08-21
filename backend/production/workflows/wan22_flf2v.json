@@ -1,0 +1,137 @@
+{
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": ""
+      }
+    },
+    "2": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": ""
+      }
+    },
+    "3": {
+      "class_type": "WanVideoModelLoader",
+      "inputs": {
+        "model": "wan2.2_ti2v_5B_fp16.safetensors",
+        "base_precision": "fp16_fast",
+        "quantization": "disabled",
+        "load_device": "offload_device",
+        "attention_mode": "sdpa"
+      }
+    },
+    "4": {
+      "class_type": "WanVideoVAELoader",
+      "inputs": {
+        "model_name": "wan2.2_vae.safetensors",
+        "precision": "bf16"
+      }
+    },
+    "5": {
+      "class_type": "LoadWanVideoT5TextEncoder",
+      "inputs": {
+        "model_name": "umt5_xxl_fp16.safetensors",
+        "precision": "bf16",
+        "load_device": "offload_device",
+        "quantization": "disabled"
+      }
+    },
+    "6": {
+      "class_type": "WanVideoTextEncode",
+      "inputs": {
+        "positive_prompt": "",
+        "negative_prompt": "",
+        "t5": ["5", 0],
+        "force_offload": true,
+        "model_to_offload": ["3", 0],
+        "device": "gpu"
+      }
+    },
+    "7": {
+      "class_type": "WanFirstLastFrameToVideo",
+      "inputs": {
+        "vae": ["4", 0],
+        "first_frame": ["1", 0],
+        "last_frame": ["2", 0],
+        "width": 480,
+        "height": 832,
+        "num_frames": 81,
+        "enable_vae_tiling": true,
+        "tile_x": 272,
+        "tile_y": 272,
+        "tile_stride_x": 144,
+        "tile_stride_y": 128
+      }
+    },
+    "8": {
+      "class_type": "WanVideoEmptyEmbeds",
+      "inputs": {
+        "width": 480,
+        "height": 832,
+        "num_frames": 81,
+        "extra_latents": ["7", 0]
+      }
+    },
+    "9": {
+      "class_type": "WanVideoSampler",
+      "inputs": {
+        "model": ["3", 0],
+        "image_embeds": ["8", 0],
+        "text_embeds": ["6", 0],
+        "steps": 30,
+        "cfg": 6.0,
+        "shift": 5.0,
+        "seed": 42,
+        "force_offload": true,
+        "scheduler": "flowmatch_pusa",
+        "riflex_freq_index": 0,
+        "denoise_strength": 1.0,
+        "rope_function": "comfy"
+      }
+    },
+    "10": {
+      "class_type": "WanVideoDecode",
+      "inputs": {
+        "vae": ["4", 0],
+        "samples": ["9", 0],
+        "enable_vae_tiling": true,
+        "tile_x": 272,
+        "tile_y": 272,
+        "tile_stride_x": 144,
+        "tile_stride_y": 128,
+        "normalization": "default"
+      }
+    },
+    "11": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "images": ["10", 0],
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "novel_video/shot",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true
+      }
+    }
+  },
+  "bindings": {
+    "image": ["1", "image"],
+    "end_frame_image": ["2", "image"],
+    "prompt": ["6", "positive_prompt"],
+    "negative_prompt": ["6", "negative_prompt"],
+    "seed": ["9", "seed"],
+    "width": [["7", "width"], ["8", "width"]],
+    "height": [["7", "height"], ["8", "height"]],
+    "frames": [["7", "num_frames"], ["8", "num_frames"]],
+    "fps": ["11", "frame_rate"],
+    "denoise_strength": ["9", "denoise_strength"],
+    "filename_prefix": ["11", "filename_prefix"]
+  }
+}

@@ -1,0 +1,31 @@
+categories:
+  cinematic:
+    label: 电影与叙事
+    count: 50
+  animation_anime:
+    label: 动画与二次元
+    count: 45
+  product_ads:
+    label: 广告与产品
+    count: 47
+  character_performance:
+    label: 人物与表演
+    count: 24
+  vfx_transitions:
+    label: 特效与转场
+    count: 21
+  camera_motion:
+    label: 镜头运动
+    count: 9
+  editing:
+    label: 视频编辑
+    count: 7
+  dialogue_sound:
+    label: 对白与音效
+    count: 9
+  animal:
+    label: 动物
+    count: 2
+  reference_consistency:
+    label: reference_consistency
+    count: 8

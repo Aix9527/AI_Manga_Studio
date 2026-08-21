@@ -1,0 +1,26 @@
+{
+  "scene_id": "scene_002",
+  "source_shot_id": "shot_02",
+  "shot": {
+    "id": "shot_02",
+    "scene_id": "scene_002",
+    "index": 1,
+    "shot_type": "wide",
+    "camera_angle": "low-angle",
+    "camera_movement": "pan",
+    "description": "不是卡住了。是她不敢动。 屏幕冷白的光映在她脸上，将那张本就瓷白的脸照得近乎透明。脸型是极标准的小鹅蛋脸，下颌线条干净利落，侧颜剪影在显示器光下像一笔写成的书法——从眉心到鼻尖，从鼻尖到唇峰，每一道转折都精准得不需要修改。那双丹凤眼此刻微微眯起，虹膜在强光下透出极深极深的褐色，像琥珀被埋在地底千万年之后的颜色。 实验室里很安静。她喜欢在这种深夜独处的环境里工作。",
+    "action": "不是卡住了。是她不敢动。 屏幕冷白的光映在她脸上，将那张本就瓷白的脸照得近乎透明。脸型是极标准的小鹅蛋脸，下颌线条干净利落，侧颜剪影在显示器光下像一笔写成的书法",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 5.0,
+    "character_ids": []
+  },
+  "section_context": {
+    "character_state": {},
+    "visual_theme": {
+      "palette": "冷蓝夜色",
+      "texture": "科技感"
+    },
+    "emotion": "dark"
+  }
+}

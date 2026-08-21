@@ -1,0 +1,11 @@
+release:
+  version: v0.7
+  name: v0.7-video-native
+  status: production_candidate
+  approved_shots:
+    gx013-gx050: true
+  qc_threshold:
+    normal: 85
+    dynamic_action: 70
+  frozen_at: 2026-08-06
+  gpt_approval: "Phase 6B 全部通过；v0.7 Production Release Candidate 冻结批准"

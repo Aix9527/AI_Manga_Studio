@@ -1,0 +1,30 @@
+{
+  "scene_id": "scene_018",
+  "source_shot_id": "gx_008",
+  "shot": {
+    "id": "gx_008",
+    "scene_id": "scene_018",
+    "index": 17,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "你敢动她一根头发——她的每一根头发，对我来说都是无价之宝。",
+    "action": "",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": [
+      "suwan"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "苏晚研究员视觉设定"
+    },
+    "visual_theme": {
+      "palette": "冷蓝",
+      "texture": "实验室"
+    },
+    "emotion": "dark"
+  }
+}

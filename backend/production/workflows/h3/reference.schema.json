@@ -1,0 +1,27 @@
+{
+  "nodes": {
+    "1": {"class_type": "CLIPLoader", "required_inputs": ["clip_name", "type", "device"]},
+    "2": {"class_type": "VAELoader", "required_inputs": ["vae_name"]},
+    "3": {"class_type": "VAELoader", "required_inputs": ["vae_name"]},
+    "4": {"class_type": "UNETLoader", "required_inputs": ["unet_name", "weight_dtype"]},
+    "5": {"class_type": "MiniMaxH3TurboLoRA", "required_inputs": ["model", "lora_name", "strength", "low_vram"]},
+    "6": {"class_type": "MiniMaxH3SigmaShift", "required_inputs": ["model", "shift_video", "shift_audio"]},
+    "7": {"class_type": "LoadImage", "required_inputs": ["image"]},
+    "8": {"class_type": "LoadImage", "required_inputs": ["image"]},
+    "9": {"class_type": "LoadImage", "required_inputs": ["image"]},
+    "11": {"class_type": "LoadVideo", "required_inputs": ["video"]},
+    "12": {"class_type": "GetVideoComponents", "required_inputs": ["video"]},
+    "13": {"class_type": "LoadAudio", "required_inputs": ["audio"]},
+    "14": {"class_type": "LoadAudio", "required_inputs": ["audio"]},
+    "15": {"class_type": "MiniMaxH3ReferenceToVideo", "required_inputs": ["clip", "vae", "audio_vae", "prompt", "width", "height", "length", "ref_image_size", "ref_images", "ref_videos", "ref_video_audios", "ref_audios"]},
+    "16": {"class_type": "RandomNoise", "required_inputs": ["noise_seed"]},
+    "17": {"class_type": "KSamplerSelect", "required_inputs": ["sampler_name"]},
+    "18": {"class_type": "BasicScheduler", "required_inputs": ["model", "scheduler", "steps", "denoise"]},
+    "19": {"class_type": "BasicGuider", "required_inputs": ["model", "conditioning"]},
+    "20": {"class_type": "SamplerCustomAdvanced", "required_inputs": ["noise", "guider", "sampler", "sigmas", "latent_image"]},
+    "21": {"class_type": "VAEDecode", "required_inputs": ["samples", "vae"]},
+    "22": {"class_type": "VAEDecodeAudio", "required_inputs": ["samples", "vae"]},
+    "23": {"class_type": "CreateVideo", "required_inputs": ["images", "audio", "fps", "bit_depth"]},
+    "24": {"class_type": "SaveVideo", "required_inputs": ["video", "filename_prefix", "format", "codec"]}
+  }
+}

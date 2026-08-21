@@ -1,0 +1,30 @@
+{
+  "scene_id": "scene_009",
+  "source_shot_id": "shot_09",
+  "shot": {
+    "id": "shot_09",
+    "scene_id": "scene_009",
+    "index": 8,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "tracking",
+    "description": "电话那头沉默了十秒。 “你现在在哪里？” “京城。高铁维修通道，往北三公里处。” “沿着铁路走。一个小时后有一趟货运列车从你所在的位置经过，车次JN-1742，第三节车厢编号白色。跳上去。商都站接你。” 一个小时后，JN-1742次货运列车从浓雾中驶来。苏晚在列车减速经过弯道的三秒钟里，扒上了车厢的扶梯。滚进车厢的一瞬间，膝盖撞在冰冷的钢板上。她先做了两件事——触诊膝盖：软组织挫伤，不影响行动。然后掏出那枚U盘。",
+    "action": "电话那头沉默了十秒。 你现在在哪里？ 京城。高铁维修通道，往北三公里处。 沿着铁路走。一个小时后有一趟货运列车从你所在的位置经过，车次JN-1742，第三节车厢",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 3.0,
+    "character_ids": [
+      "suwan"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "角色苏晚的视觉设定"
+    },
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

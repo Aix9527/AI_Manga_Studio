@@ -1,0 +1,125 @@
+{
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": ""
+      }
+    },
+    "2": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "umt5_xxl_fp16.safetensors",
+        "type": "wan",
+        "device": "default"
+      }
+    },
+    "3": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "wan_2.1_vae.safetensors"
+      }
+    },
+    "4": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "Wan2_1-I2V-14B-480P_fp8_e4m3fn.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "5": {
+      "class_type": "CLIPVisionLoader",
+      "inputs": {
+        "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+      }
+    },
+    "6": {
+      "class_type": "CLIPVisionEncode",
+      "inputs": {
+        "clip_vision": ["5", 0],
+        "image": ["1", 0],
+        "crop": "center"
+      }
+    },
+    "7": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["2", 0],
+        "text": ""
+      }
+    },
+    "8": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["2", 0],
+        "text": ""
+      }
+    },
+    "9": {
+      "class_type": "WanImageToVideo",
+      "inputs": {
+        "positive": ["7", 0],
+        "negative": ["8", 0],
+        "vae": ["3", 0],
+        "width": 480,
+        "height": 832,
+        "length": 49,
+        "batch_size": 1,
+        "clip_vision_output": ["6", 0],
+        "start_image": ["1", 0]
+      }
+    },
+    "10": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": ["4", 0],
+        "positive": ["9", 0],
+        "negative": ["9", 1],
+        "latent_image": ["9", 2],
+        "seed": 42,
+        "steps": 30,
+        "cfg": 3.0,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 0.30
+      }
+    },
+    "11": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["10", 0],
+        "vae": ["3", 0]
+      }
+    },
+    "12": {
+      "class_type": "CreateVideo",
+      "inputs": {
+        "images": ["11", 0],
+        "fps": 24
+      }
+    },
+    "13": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": ["12", 0],
+        "filename_prefix": "novel_video/shot",
+        "format": "auto",
+        "codec": "auto"
+      }
+    }
+  },
+  "bindings": {
+    "image": ["1", "image"],
+    "prompt": ["7", "text"],
+    "negative_prompt": ["8", "text"],
+    "seed": ["10", "seed"],
+    "width": ["9", "width"],
+    "height": ["9", "height"],
+    "frames": ["9", "length"],
+    "fps": ["12", "fps"],
+    "denoise": ["10", "denoise"],
+    "steps": ["10", "steps"],
+    "cfg": ["10", "cfg"],
+    "filename_prefix": ["13", "filename_prefix"]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "scene_id": "scene_016",
+  "source_shot_id": "gx_006",
+  "shot": {
+    "id": "gx_006",
+    "scene_id": "scene_016",
+    "index": 15,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "警报响起的瞬间，一切都变了。",
+    "action": "",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": [
+      "suwan"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "苏晚研究员视觉设定"
+    },
+    "visual_theme": {
+      "palette": "冷蓝",
+      "texture": "实验室"
+    },
+    "emotion": "dark"
+  }
+}

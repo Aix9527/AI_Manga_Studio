@@ -1,0 +1,22 @@
+version: 1
+
+rules:
+
+  project:
+    source:
+      - projects/*
+
+
+  episode:
+    default_name:
+      Episode 1
+
+
+  scene:
+    default_name:
+      Imported Scene
+
+
+  shot:
+    default_name:
+      Imported Shot

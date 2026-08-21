@@ -1,0 +1,25 @@
+# 运动模板 v1（Phase 4 实测数据校准）
+profiles:
+  low:
+    diff_target: 3-15
+    cv_max: 0.45
+    usage: [dialogue, emotion, exploration, environment_static]
+    camera: [slow_push, macro_push]
+  medium:
+    diff_target: 15-35
+    cv_max: 0.55
+    usage: [action_controlled, double_interaction, world_drift]
+    camera: [tracking, dolly]
+    avoid: [handheld_shake, extreme_motion]
+  high:
+    diff_target: 35-55
+    cv_max: 0.65
+    usage: [escape, chase]
+    warning: "单镜连续高速 <= 3s，谨慎使用"
+
+measured_benchmarks:
+  gx_003_dialogue:   { cv: 0.41 }
+  gx_005_double:     { cv: 0.45 }
+  gx_006_action:     { cv: 0.52 }
+  gx_007_action_v2:  { cv: 0.516 }
+  gx_012_world:      { cv: 0.49 }

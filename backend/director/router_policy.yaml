@@ -1,0 +1,24 @@
+# Director Router Policy (Phase 10.8-C Step 3, GPT spec)
+#   rule    -> RuleDirectorProvider (motion-heavy / deterministic)
+#   qwen    -> LLM director (emotion / narrative)
+#   hybrid  -> LLM with rule fallback (world / exploration)
+version: 1.0
+default: hybrid
+routes:
+  action: rule
+  chase: rule
+  world: hybrid
+  environment: rule
+  exploration: hybrid
+  dialogue: qwen
+  emotion: qwen
+  transition: qwen
+  revelation: qwen
+  establishment: qwen
+# Phase 11.3 Policy Evolution config (GPT: stats window + rollback + human
+# approval; no unsupervised online learning). Not yet active.
+policy_learning:
+  min_samples: 20
+  confidence_threshold: 0.85
+  mode: manual_approval
+  rollback_window: 200

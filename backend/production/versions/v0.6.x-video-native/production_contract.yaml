@@ -1,0 +1,32 @@
+video_engine:
+  model: wan2.2_ti2v_5b
+  sha256: 456f901338bd9eadbded3828b819109a9b68e8a525ca5cf8d0049a69fcfeca1e
+  vae: wan2.2_vae.safetensors
+  text_encoder: umt5_xxl_fp8_e4m3fn_scaled.safetensors
+generation:
+  resolution: 480x832
+  frames: 81
+  fps: 24
+sampler:
+  scheduler: uni_pc
+  shift: 8
+  cfg: 5
+  steps: 20
+  denoise: 1.0
+quality:
+  mosaic: 0
+  static: 0
+  motion_cv_max: 0.65
+release:
+  status: production_candidate
+  version: v0.6.x-video-native
+  rating: A-
+  phase4:
+    gx_001-gx_012: passed
+    score_range: 81.4-94.3
+next_phase:
+  phase5: chapter1_40s_full_film
+  transitions:
+    environment: fade_0.15s
+    dialogue: hard_cut
+    climax: match_cut

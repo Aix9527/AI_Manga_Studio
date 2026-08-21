@@ -1,0 +1,4 @@
+# v0.7 生产工作流（冻结）
+name: wan22_native
+template: backend/production/workflows/wan22_ti2v5b_native.json
+params: {width: 480, height: 832, frames: 81, fps: 24, steps: 20, cfg: 5.0, sampler: uni_pc, scheduler: simple, shift: 8}

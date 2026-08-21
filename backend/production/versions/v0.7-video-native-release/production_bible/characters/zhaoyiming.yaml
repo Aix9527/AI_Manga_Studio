@@ -1,0 +1,18 @@
+# 赵一鸣 — 新角色 v1（Phase 6A 首现）
+character:
+  name: 赵一鸣
+  role: 三星堆考古站技术员（26岁）
+  prompt_lock: "Zhao Yiming, Chinese man in his late 20s, black-rimmed glasses, a cowlick of hair sticking up, lean, nerdy energetic technician, khaki field jacket"
+
+face:
+  age: 26
+  hair: black with always-sticking cowlick
+  glasses: black-rimmed
+  eyes: bright, quick
+
+wardrobe:
+  standard: { khaki_field_jacket: required }
+
+personality_tag: 碎嘴 / 紧张话多 / 技术宅
+
+first_shot: gx_015

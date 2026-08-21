@@ -1,0 +1,12 @@
+{
+  "workflow": "h3_reference",
+  "prompt_source": "H3PromptTemplateRegistry",
+  "bindings": {
+    "prompt": "text",
+    "ref_images": "characters",
+    "ref_audios": "voices",
+    "ref_videos": "motion_reference"
+  },
+  "profile_default": "production",
+  "orientation_default": "landscape"
+}

@@ -1,0 +1,34 @@
+# Physics Consistency Layer (GPT 2026-08-06 批准)
+# 目的：保证画面内物体与动作符合物理逻辑
+# 用法：每镜生成前逐项检查；负向词全局追加。
+
+checks:
+  human:
+    - "hand-object contact (手与物体接触点正确)"
+    - "finger count (手指数量正常)"
+    - "joint movement (关节运动符合人体结构)"
+    - "body balance (身体重心平衡)"
+  gravity:
+    - "objects fall downward (物体下落方向正确)"
+    - "cloth follows gravity (布料受重力下垂)"
+    - "hair follows inertia (头发随惯性摆动)"
+  optics:
+    - "reflection direction (反射方向正确)"
+    - "shadow direction (阴影方向与光源一致)"
+    - "light source consistency (光源位置一致)"
+  occlusion:
+    - "foreground blocks background (前景遮挡背景)"
+    - "hands cover objects (手遮挡物体时正确)"
+    - "objects remain behind walls (物体不会穿墙)"
+
+negative_prompt_additions:
+  - "floating object"
+  - "impossible physics"
+  - "broken gravity"
+  - "disconnected hand"
+  - "wrong shadow"
+  - "incorrect reflection"
+  - "object passing through body"
+  - "elastic material deformation"
+  - "morphing body"
+  - "extra limbs"

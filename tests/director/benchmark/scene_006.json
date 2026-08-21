@@ -1,0 +1,32 @@
+{
+  "scene_id": "scene_006",
+  "source_shot_id": "shot_06",
+  "shot": {
+    "id": "shot_06",
+    "scene_id": "scene_006",
+    "index": 5,
+    "shot_type": "close-up",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "“他们要找的人，终于出现了。” 话音落地的同时，警报响了。 方觉明从大衣内衬里掏出一枚U盘，塞进她手心。“走。紧急通道。” “方老师，到底是什么——” “你丈夫不是死于车祸。小满的血型在妇产医院系统里有备案。你的基因序列在入职体检时就已经入库了。”方觉明的嘴唇在发抖，但每一个字都精准得像手术刀，“他们排查了所有可能携带完整序列的个体。你排第三。前两个已经消失了。你是最后一个。” 苏晚的表情在那一瞬间完成了从困惑到理解的全部过渡——眉头微蹙、眼神聚焦、嘴唇紧抿。",
+    "action": "他们要找的人，终于出现了。 话音落地的同时，警报响了。 方觉明从大衣内衬里掏出一枚U盘，塞进她手心。走。紧急通道。 方老师，到底是什么—— 你丈夫不是死于车祸。",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 4.0,
+    "character_ids": [
+      "suwan",
+      "fangjueming"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "角色苏晚的视觉设定",
+      "fangjueming": "角色方觉明的视觉设定"
+    },
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

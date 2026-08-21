@@ -1,0 +1,25 @@
+# 剧集合同 v1
+series: 归墟觉醒·天倾
+episode: 第一章 垃圾DNA
+status: production_candidate
+version: v0.6.1
+duration: 42.67s
+resolution: 1080x1920
+fps: 24
+
+quality_gate:
+  min_score: 85
+  mosaic: 0
+  motion_cv_max: 0.65
+  protected_regions: { intro: 1.2s, outro: 1.5s }
+
+pipeline:
+  workflow: wan22_ti2v5b_native
+  model: wan2.2_ti2v_5B_fp16_fixed.safetensors
+  sampler: uni_pc/simple, steps 20, cfg 5, shift 8
+  keyframe_model: RealVisXL_V4.0
+
+phase6:
+  phase6a: [gx_013, gx_030]
+  batch_size: 18
+  coverage: [new_environment, new_character, dialogue, action, worldbuilding]

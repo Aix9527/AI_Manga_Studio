@@ -1,0 +1,20 @@
+# 视觉识别系统 v1（Phase 5 验证通过）
+project: 归墟觉醒·天倾
+
+color_language:
+  reality_line:
+    palette: [cold_blue, teal_green, low_saturation]
+    scenes: [实验室, 城市夜景, 考古站]
+    grade: "teal-orange, contrast +8%, grain 5%"
+  guixu_line:
+    palette: [blue_gray, high_contrast, massive_space]
+    scenes: [倒悬结构, 三星堆地下, 甬道壁画]
+    grade: "higher contrast, deep blue shadows, gold accent (energy core)"
+
+night_scene:
+  min_luminance: 60
+  key_light_required: true
+  forbidden: [pitch_black, underexposed]
+
+film_grain: 5%
+subtitles: { font: 微软雅黑, size: 38, safe_zone: "bottom 11.5%", box: "black@0.4" }

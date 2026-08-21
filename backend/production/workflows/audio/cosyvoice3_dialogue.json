@@ -1,0 +1,13 @@
+{
+  "type": "voice",
+  "provider": "cosyvoice3",
+  "task": "character_dialogue",
+  "params": {
+    "text": "",
+    "character_id": "",
+    "emotion": "neutral",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "fallback": ["gpt_sovits", "cosyvoice"]
+}

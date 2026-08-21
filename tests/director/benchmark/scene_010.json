@@ -1,0 +1,26 @@
+{
+  "scene_id": "scene_010",
+  "source_shot_id": "shot_10",
+  "shot": {
+    "id": "shot_10",
+    "scene_id": "scene_010",
+    "index": 9,
+    "shot_type": "close-up",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "平板电脑弹出加密界面。密码提示问题：“我们是什么？” 她输入：神族。 文件解锁。数百份基因比对报告、考古发掘记录、异常坐标卫星标注，以及一份被反复修改却从未发表过的论文手稿。标题四个字——《我们是人》。 导言第一段：",
+    "action": "平板电脑弹出加密界面。密码提示问题：我们是什么？ 她输入：神族。 文件解锁。数百份基因比对报告、考古发掘记录、异常坐标卫星标注，以及一份被反复修改却从未发表过的",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 4.0,
+    "character_ids": []
+  },
+  "section_context": {
+    "character_state": {},
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

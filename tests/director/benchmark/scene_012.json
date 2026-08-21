@@ -1,0 +1,26 @@
+{
+  "scene_id": "scene_012",
+  "source_shot_id": "gx_002",
+  "shot": {
+    "id": "gx_002",
+    "scene_id": "scene_012",
+    "index": 11,
+    "shot_type": "wide",
+    "camera_angle": "high-angle",
+    "camera_movement": "static",
+    "description": "这里研究的东西，比人类文明更古老。",
+    "action": "",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": []
+  },
+  "section_context": {
+    "character_state": {},
+    "visual_theme": {
+      "palette": "冷蓝",
+      "texture": "实验室"
+    },
+    "emotion": "dark"
+  }
+}

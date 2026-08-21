@@ -1,0 +1,22 @@
+# 方觉明 — 角色锁 v1（Phase 4 验证通过）
+character:
+  name: 方觉明
+  role: 导师 / 古基因学者（70岁）
+  prompt_lock: "Fang Jueming, 70-year-old Chinese professor, gray hair, camel wool sweater, tired but intelligent eyes"
+
+face:
+  age: 70
+  hair: short gray
+  skin: weathered, elderly texture
+  eyes: tired but intelligent
+
+wardrobe:
+  standard: { camel_wool_sweater: required }
+
+forbidden:
+  - age_change
+  - hair_style_change
+  - eye_color_change
+
+approved_shots: [gx_004, gx_005]
+reference: gx_004 (基准镜)

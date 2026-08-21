@@ -1,0 +1,216 @@
+/* Clear History button and dialog styles */
+
+/* === Panel (full mode) === */
+.clear-history-panel {
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border-subtle, #333);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 16px 0;
+}
+
+.clear-history-panel__title {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.clear-history-panel__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  background: var(--bg-elevated, #16213e);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-item__label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #888);
+  margin-bottom: 4px;
+}
+
+.stat-item__value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.clear-history-panel__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.clear-history-panel__error {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.clear-history-panel__success {
+  color: #51cf66;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+/* === Buttons === */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn--danger {
+  background: #e74c3c;
+  color: #fff;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+.btn--danger.btn--outline {
+  background: transparent;
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
+}
+
+.btn--danger.btn--outline:hover:not(:disabled) {
+  background: rgba(231, 76, 60, 0.1);
+}
+
+.btn--secondary {
+  background: var(--bg-elevated, #2a2a4a);
+  color: var(--text-primary, #e0e0e0);
+  border: 1px solid var(--border-subtle, #444);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--bg-hover, #3a3a5a);
+}
+
+/* === Confirmation Dialog === */
+.clear-dialog__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+.clear-dialog {
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border-subtle, #333);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.2s ease;
+}
+
+.clear-dialog__title {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.clear-dialog__warning {
+  font-size: 13px;
+  color: var(--text-muted, #aaa);
+  margin: 0 0 20px 0;
+  line-height: 1.6;
+}
+
+.clear-dialog__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.radio-label,
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+}
+
+.radio-label input,
+.checkbox-label input {
+  accent-color: #e74c3c;
+}
+
+.clear-dialog__error {
+  color: #ff6b6b;
+  font-size: 12px;
+  margin: 12px 0 0 0;
+}
+
+.clear-dialog__success {
+  color: #51cf66;
+  font-size: 12px;
+  margin: 12px 0 0 0;
+}
+
+.clear-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

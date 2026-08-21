@@ -1,0 +1,26 @@
+{
+  "scene_id": "scene_011",
+  "source_shot_id": "gx_001",
+  "shot": {
+    "id": "gx_001",
+    "scene_id": "scene_011",
+    "index": 10,
+    "shot_type": "wide",
+    "camera_angle": "high-angle",
+    "camera_movement": "static",
+    "description": "凌晨三点十七分。京城大学基因考古实验室。",
+    "action": "",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": []
+  },
+  "section_context": {
+    "character_state": {},
+    "visual_theme": {
+      "palette": "冷蓝",
+      "texture": "实验室"
+    },
+    "emotion": "dark"
+  }
+}

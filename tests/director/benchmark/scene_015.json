@@ -1,0 +1,30 @@
+{
+  "scene_id": "scene_015",
+  "source_shot_id": "gx_005",
+  "shot": {
+    "id": "gx_005",
+    "scene_id": "scene_015",
+    "index": 14,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "你丈夫不是死于车祸。他们排查了所有可能携带完整序列的人。你排第三。前两个已经消失了。你是最后一个。",
+    "action": "",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": [
+      "suwan"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "苏晚研究员视觉设定"
+    },
+    "visual_theme": {
+      "palette": "冷蓝",
+      "texture": "实验室"
+    },
+    "emotion": "dark"
+  }
+}

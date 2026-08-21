@@ -1,0 +1,32 @@
+{
+  "scene_id": "scene_001",
+  "source_shot_id": "shot_01",
+  "shot": {
+    "id": "shot_01",
+    "scene_id": "scene_001",
+    "index": 0,
+    "shot_type": "wide",
+    "camera_angle": "high-angle",
+    "camera_movement": "push-in",
+    "description": "序章 不周山 西北海之外，大荒之隅，有山而不合，名曰不周。 ——《山海经·大荒西经》 天柱折，地维绝。天倾西北，故日月星辰移焉；地不满东南，故水潦尘埃归焉。 ——《淮南子·天文训》 这不是神话。 这是人类文明史上第一份灾难报告。 写这份报告的人，用的是我们至今未能完全破译的文字。他们把真相藏在故事里，等了一百万年，等一个能读懂的人。 「人类注定无法回到故乡。」 ——方觉明遗稿 京城大学基因考古实验室，凌晨三点十七分。 苏晚盯着屏幕上滚动的碱基序列，手指在键盘上方悬停了将近两分钟。",
+    "action": "序章 不周山 西北海之外，大荒之隅，有山而不合，名曰不周。 ——《山海经·大荒西经》 天柱折，地维绝。天倾西北，故日月星辰移焉；地不满东南，故水潦尘埃归焉。 —",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": [
+      "suwan",
+      "fangjueming"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "角色苏晚的视觉设定",
+      "fangjueming": "角色方觉明的视觉设定"
+    },
+    "visual_theme": {
+      "palette": "冷蓝夜色",
+      "texture": "科技感"
+    },
+    "emotion": "dark"
+  }
+}

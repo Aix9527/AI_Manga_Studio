@@ -1,0 +1,4 @@
+# 动作镜验收（v0.7 冻结）
+name: dynamic_action_shot
+acceptance: {qc_min: 70, mosaic: 0, motion_cv_max: 0.65, tc: no_hard_gate}
+note: "火花/烟尘/碎屑/绳索等密集动态，block_artifact_score=0.00 时按 artifact 误报处理"

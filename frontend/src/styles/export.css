@@ -1,0 +1,317 @@
+/* 成片与导出页面样式 */
+
+.export-layout {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.export-player-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.export-player-panel {
+  padding: 18px;
+}
+
+.export-video-wrapper {
+  margin: 12px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #000;
+  overflow: hidden;
+}
+
+.export-video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  aspect-ratio: 16/9;
+  object-fit: contain;
+  background: #000;
+}
+
+.export-video--small {
+  max-height: 220px;
+  aspect-ratio: 16/9;
+}
+
+.export-video-info {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 12px 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+}
+
+.export-video-info > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  background: var(--color-bg-secondary);
+}
+
+.export-info-label {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .04em;
+}
+
+.export-info-value {
+  color: var(--color-text-primary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.export-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.export-active-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid #28503e;
+  border-radius: var(--radius-sm);
+  background: #12261f;
+  color: var(--color-success);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.export-versions-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.export-version-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-version-item {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+.export-version-item:hover {
+  border-color: var(--color-border-hover);
+}
+
+.export-version-item[aria-pressed="true"] {
+  border-color: #5a4391;
+  background: #241c38;
+}
+
+.export-version-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.export-version-active {
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #28503e;
+  color: var(--color-success);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.export-version-meta {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.export-version-date {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.export-version-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.export-version-btn {
+  min-height: 26px !important;
+  padding: 3px 8px !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--color-bg-primary) !important;
+  color: var(--color-text-secondary) !important;
+  font-size: 10px !important;
+}
+
+.export-version-btn:hover {
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent-hover) !important;
+}
+
+.export-checklist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.export-check--ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #162b1a;
+  color: var(--color-success);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.export-check--pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #21262d;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.export-compare-panel {
+  padding: 18px;
+}
+
+.export-compare-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.export-close-compare {
+  min-height: 28px !important;
+  padding: 4px 10px !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--color-bg-tertiary) !important;
+  color: var(--color-text-secondary) !important;
+  font-size: 11px !important;
+}
+
+.export-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.export-compare-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-compare-label {
+  padding: 4px 10px;
+  border: 1px solid #5a4391;
+  border-radius: var(--radius-sm);
+  background: #241c38;
+  color: #e5dcff;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.export-compare-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+}
+
+.export-compare-meta > div {
+  min-width: 0;
+  padding: 6px 8px;
+  background: var(--color-bg-secondary);
+}
+
+.export-compare-meta dt {
+  color: var(--color-text-muted);
+  font-size: 9px;
+}
+
+.export-compare-meta dd {
+  margin-top: 2px;
+  color: var(--color-text-primary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .export-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .export-video-info {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .export-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .export-video-info {
+    grid-template-columns: 1fr;
+  }
+}

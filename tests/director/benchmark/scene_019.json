@@ -1,0 +1,30 @@
+{
+  "scene_id": "scene_019",
+  "source_shot_id": "gx_009",
+  "shot": {
+    "id": "gx_009",
+    "scene_id": "scene_019",
+    "index": 18,
+    "shot_type": "medium",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "归墟。海拔负四百米。地下倒悬结构。",
+    "action": "",
+    "dialogue": "",
+    "emotion": "dark",
+    "duration": 6.0,
+    "character_ids": [
+      "suwan"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "苏晚研究员视觉设定"
+    },
+    "visual_theme": {
+      "palette": "冷蓝",
+      "texture": "实验室"
+    },
+    "emotion": "dark"
+  }
+}

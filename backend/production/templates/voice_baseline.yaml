@@ -1,0 +1,24 @@
+version: 1.0.1
+
+providers:
+  character:
+    primary: cosyvoice3
+  narration:
+    primary: indextts2
+  asset:
+    primary: gpt_sovits
+
+quality:
+  speaker_consistency:
+    minimum: 0.95
+  loudness:
+    target: -16
+    tolerance: 2
+  true_peak:
+    maximum: -1
+  subtitle_alignment:
+    maximum_ms: 250
+
+h3:
+  audio_reference:
+    enabled: true

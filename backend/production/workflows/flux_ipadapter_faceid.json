@@ -1,0 +1,141 @@
+{
+  "workflow": {
+    "1": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "flux-2-klein-4b-fp8.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "2": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen_3_4b.safetensors",
+        "type": "flux2",
+        "device": "default"
+      }
+    },
+    "3": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "flux2-vae.safetensors"
+      }
+    },
+    "4": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "",
+        "clip": ["2", 0]
+      }
+    },
+    "5": {
+      "class_type": "ConditioningZeroOut",
+      "inputs": {
+        "conditioning": ["4", 0]
+      }
+    },
+    "6": {
+      "class_type": "EmptyFlux2LatentImage",
+      "inputs": {
+        "width": 512,
+        "height": 896,
+        "batch_size": 1
+      }
+    },
+    "7": {
+      "class_type": "RandomNoise",
+      "inputs": {
+        "noise_seed": 42
+      }
+    },
+    "8": {
+      "class_type": "CFGGuider",
+      "inputs": {
+        "model": ["17", 0],
+        "positive": ["4", 0],
+        "negative": ["5", 0],
+        "cfg": 1.0
+      }
+    },
+    "9": {
+      "class_type": "KSamplerSelect",
+      "inputs": {
+        "sampler_name": "euler"
+      }
+    },
+    "10": {
+      "class_type": "Flux2Scheduler",
+      "inputs": {
+        "steps": 4,
+        "width": 512,
+        "height": 896
+      }
+    },
+    "11": {
+      "class_type": "SamplerCustomAdvanced",
+      "inputs": {
+        "noise": ["7", 0],
+        "guider": ["8", 0],
+        "sampler": ["9", 0],
+        "sigmas": ["10", 0],
+        "latent_image": ["6", 0]
+      }
+    },
+    "12": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["11", 0],
+        "vae": ["3", 0]
+      }
+    },
+    "14": {
+      "class_type": "IPAdapterModelLoader",
+      "inputs": {
+        "ipadapter_file": "ip-adapter-faceid-plusv2_sd15.bin"
+      }
+    },
+    "15": {
+      "class_type": "CLIPVisionLoader",
+      "inputs": {
+        "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+      }
+    },
+    "16": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": ""
+      }
+    },
+    "17": {
+      "class_type": "IPAdapterFaceID",
+      "inputs": {
+        "model": ["1", 0],
+        "ipadapter": ["14", 0],
+        "image": ["16", 0],
+        "clip_vision": ["15", 0],
+        "weight": 0.85,
+        "weight_type": "linear",
+        "combine_embeds": "concat",
+        "start_at": 0.0,
+        "end_at": 1.0,
+        "embeds_scaling": "V only"
+      }
+    },
+    "13": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": ["12", 0],
+        "filename_prefix": "novel_video/keyframe"
+      }
+    }
+  },
+  "bindings": {
+    "prompt": ["4", "text"],
+    "seed": ["7", "noise_seed"],
+    "width": [["6", "width"], ["10", "width"]],
+    "height": [["6", "height"], ["10", "height"]],
+    "reference_image": ["16", "image"],
+    "ipadapter_weight": ["17", "weight"],
+    "filename_prefix": ["13", "filename_prefix"]
+  }
+}

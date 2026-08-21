@@ -1,0 +1,11 @@
+{
+  "type": "voice",
+  "provider": "gpt_sovits",
+  "task": "voice_asset_clone",
+  "params": {
+    "character_id": "",
+    "reference_audio": "",
+    "language": "zh"
+  },
+  "fallback": ["cosyvoice3"]
+}

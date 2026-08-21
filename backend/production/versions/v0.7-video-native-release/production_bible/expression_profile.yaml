@@ -1,0 +1,43 @@
+# Expression Control System v1.0 (GPT 2026-08-06 批准)
+# 目的：解决 Wan 模型"AI演员表情过度表演"导致的诡异/生硬问题
+# 用法：每个分镜必须声明 expression_level，prompt 自动注入对应描述；负向词全局追加。
+
+levels:
+  0:
+    name: neutral
+    use_for: ["科研", "冷静", "遗迹探索", "环境空镜"]
+    prompt: "neutral facial expression, relaxed facial muscles, natural resting face, subtle human emotion"
+  1:
+    name: micro (默认, 90% 镜头使用)
+    use_for: ["对白", "探索", "日常动作"]
+    prompt: "subtle micro expression, slight eyebrow movement, minimal facial muscle change, natural breathing, restrained emotion"
+  2:
+    name: controlled emotion (仅高潮/关键剧情)
+    use_for: ["高潮预兆", "惊惧", "紧张"]
+    prompt: "controlled fear, slightly widened eyes, tense facial muscles, restrained shock"
+  3:
+    name: forbidden_by_default
+    use_for: ["仅特殊镜，须单独批准"]
+    forbidden: ["crying", "screaming", "laughing", "extreme expression"]
+
+negative_prompt_additions:
+  - "forced smile"
+  - "fake smile"
+  - "wide grin"
+  - "creepy smile"
+  - "exaggerated expression"
+  - "cartoon facial expression"
+  - "overacting"
+  - "theatrical acting"
+  - "emotionless doll face"
+  - "uncanny smile"
+
+remove_from_prompts:
+  - "beautiful smile"
+  - "smile"
+  - "grin"
+
+face_checks:
+  - "face_identity PASS"
+  - "emotion PASS"
+  - "不要求 TC 高（表情镜以表情可信度为准）"

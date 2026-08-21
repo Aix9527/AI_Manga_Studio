@@ -1,0 +1,20 @@
+# 白砚行 Bai Yanxing (Phase 6B 新角色)
+# 第四章 反派：归墟青铜祭坛之主，兽族进化渴求者
+name: 白砚行
+id: baiyanxing_v1
+role: villain
+appearance: |
+  50s Chinese male, black zhongshan suit (中山装), gold-rimmed glasses,
+  thin scholarly face, precise restrained demeanor, hidden predatory stillness
+key_features:
+  - "gold-rimmed glasses (金丝边眼镜)"
+  - "black zhongshan suit (黑色中山装)"
+  - "gold glint in pupils when excited (瞳孔边缘金色反光)"
+transformation: |
+  手臂在金色光芒中变形，皮肤下肌肉翻滚重组，
+  一双手三秒内从学者之手变成一对利爪
+expression_baseline: "cold scholarly calm, controlled, faint smile"
+expression_peak: "excited predator gleam, then shattered disbelief"
+locks:
+  - "中山装与金丝眼镜不得更换"
+  - "瞳孔金色反光仅在高潮/暴露时出现"

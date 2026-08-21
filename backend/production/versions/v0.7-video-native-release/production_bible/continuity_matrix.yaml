@@ -1,0 +1,51 @@
+# 18 镜衔接矩阵 Continuity Matrix (GPT 2026-08-06 批准)
+# 三类衔接：hard cut / match cut / FLF2V
+# FLF2V：上一镜末帧作为下一镜首帧（end frame -> next start）
+# match cut：视觉元素匹配（形状/运动/构图），不共享首帧
+# hard cut：世界观/场景跳转，直接切换
+
+connections:
+  - pair: [gx_013, gx_014]
+    type: hard_cut
+  - pair: [gx_014, gx_015]
+    type: match_cut
+  - pair: [gx_015, gx_016]
+    type: flf2v
+  - pair: [gx_016, gx_017]
+    type: flf2v
+  - pair: [gx_017, gx_018]
+    type: flf2v
+  - pair: [gx_018, gx_019]
+    type: hard_cut
+  - pair: [gx_019, gx_020]
+    type: match_cut
+  - pair: [gx_020, gx_021]
+    type: match_cut
+  - pair: [gx_021, gx_022]
+    type: flf2v
+  - pair: [gx_022, gx_023]
+    type: match_cut
+  - pair: [gx_023, gx_024]
+    type: flf2v
+  - pair: [gx_024, gx_025]
+    type: hard_cut
+  - pair: [gx_025, gx_026]
+    type: flf2v
+  - pair: [gx_026, gx_027]
+    type: match_cut
+  - pair: [gx_027, gx_028]
+    type: hard_cut
+  - pair: [gx_028, gx_029]
+    type: match_cut
+  - pair: [gx_029, gx_030]
+    type: hard_cut
+
+examples:
+  - "gx_017 -> gx_018：人物进入甬道（连续动作，FLF2V）"
+  - "gx_021 -> gx_022：青铜门纹饰 → 割掌伤口（圆形纹饰匹配，match cut）"
+  - "gx_013 -> gx_014：公路 → 考古站（世界观跳转，hard cut）"
+
+flf2v_params:
+  workflow: wan22_ti2v5b_native
+  end_frame_as_start: true
+  note: "首帧即上一镜末帧，接续动作/机位延续"

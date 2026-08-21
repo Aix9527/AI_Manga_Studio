@@ -1,0 +1,108 @@
+{
+  "library_name": "Guixu2 Prompt Library",
+  "source": "Higgsfield Hell Grind CINEDANCE skill + MiniMax H3 官方指南",
+  "version": "v1",
+  "style_prefix": "Style: 8K IMAX. Photorealistic — no 3D render, no game engine, no game-cutscene aesthetic. Cinematography: floating immersive camera that lives with the actors; natural motivated light; painterly composed frames, strong silhouettes against the light. Lighting: Natural light only — contre-jour backlight, camera on shadow side, atmospheric haze throughout. Key light from sky and windows only. Color: 60:30:10 — dominant / secondary / accent. Camera: Physical cine lens. 180° shutter motion blur. Skin: Pore-level realism — vellus hair, asymmetric moles, capillary flush, pore-shadow matching on-set light. Acting: Hollywood — micro-pauses before reactions, precise eye-line, wet living eyes with catch-lights, visible breath and chest rise. Physics: Gravity and inertia respected — mass has real weight, correct contact shadows. No floating props. Composition: Rule of thirds + golden ratio. Every person moving from frame one.",
+  "sections": [
+    {
+      "key": "scene_context",
+      "name": "SCENE CONTEXT",
+      "rule": "以『EXACT N CHARACTERS — NO DUPLICATES』开头：发生什么、谁在画面、单次时长。禁止模型添加多余人物/道具。"
+    },
+    {
+      "key": "active_references",
+      "name": "ACTIVE REFERENCES",
+      "rule": "@标签 命名每个引用（角色/地点）；角色引用保留面容，地点引用『只取空间与材质，不继承构图/角度/色彩』。"
+    },
+    {
+      "key": "location_map",
+      "name": "LOCATION MAP",
+      "rule": "用文字画出场地地理：门在画面左、距离、道具位置、相机所在侧，相机永不越线。"
+    },
+    {
+      "key": "first_frame",
+      "name": "FIRST FRAME AND SPATIAL BLOCKING",
+      "rule": "首帧站位逐人写清：谁站在哪、朝向、与镜头的距离；首帧无空镜头、无运镜。"
+    },
+    {
+      "key": "format_mode",
+      "name": "FORMAT MODE",
+      "rule": "单 take 或多硬切、时长（秒）、实时性；MiniMaxH3 用『单段连续 take，15 秒，实时』。"
+    },
+    {
+      "key": "optics",
+      "name": "OPTICS",
+      "rule": "焦距/机位高度/物距/景深：如『≈40° 广角，机位胸口高度，距垫子六米，景深覆盖门与道具』。"
+    },
+    {
+      "key": "camera",
+      "name": "CAMERA",
+      "rule": "运镜行为 + 禁止项：呼吸式手持、慢重构图；禁止推拉/急摇。"
+    },
+    {
+      "key": "action_timing",
+      "name": "ACTION TIMING",
+      "rule": "动作逐秒分解（0.0-1.0s…8.0-12.0s），每拍不超过三句，避免信息过载糊帧。"
+    },
+    {
+      "key": "physics",
+      "name": "PHYSICS",
+      "rule": "重量/接触/惯性：道具真实重量、摆动滞后一拍、液体随动作倾斜，呼吸是可见的工作。"
+    },
+    {
+      "key": "lighting",
+      "name": "LIGHTING",
+      "rule": "单一光源逻辑 + 光源位置；禁用词→安全词：『dark』→『low key』。"
+    },
+    {
+      "key": "audio",
+      "name": "AUDIO",
+      "rule": "仅环境音（diegetic）+ 台词逐字（角色声音描述 verbatim）；无音乐。"
+    },
+    {
+      "key": "character_acting",
+      "name": "CHARACTER ACTING",
+      "rule": "每个角色：状态 / 想要 / 隐藏什么 / 身体节奏 / 变化点。写行为而非情绪。"
+    },
+    {
+      "key": "style",
+      "name": "STYLE",
+      "rule": "Style Prefix 逐字粘贴到每条提示词结尾。"
+    },
+    {
+      "key": "quality",
+      "name": "QUALITY",
+      "rule": "8K 细节、毛孔级皮肤、无抖动闪烁、多张脸始终等于引用。"
+    },
+    {
+      "key": "positive_constraints",
+      "name": "POSITIVE CONSTRAINTS",
+      "rule": "一切数量与禁令写成『画面中确实存在什么』：恰好 N 人、恰好一条水晶臂、五具假人、相机位置、时长。过去时写成现在时。禁用年龄、禁用『不要做X』（模型会反着做）。"
+    }
+  ],
+  "wording_rules": [
+    "动作只用肯定式：写『falls on his stomach』，不写『does NOT fall on his back』",
+    "角色从首帧就在画面里，未要求不得看镜头",
+    "永远不写年龄（触发内容过滤）；用角色/服装/动作代替",
+    "维护禁用词典：dark→low key，jolting→rapid motion",
+    "每拍 ≤3 句；提示词可以长（3000-4000 词），但一拍不能过载",
+    "相机写进动作里；现在时、短句"
+  ],
+  "minimax_h3_params": {
+    "fps": 24,
+    "duration_range_s": [
+      4,
+      15
+    ],
+    "native_audio": "32kHz 立体声",
+    "frame_length_rule": "length = duration × 24（124≈5s，362≈15s，step 17）"
+  },
+  "video_negative_prompt": "temporal flicker, lighting flicker, frame inconsistency, identity drift, camera jitter, motion jitter, sudden pose change, blurry, distorted, watermark, text",
+  "temporal_prompt_rules": [
+    "动作用连续式：slow continuous walk / camera smoothly pushes forward",
+    "禁止突变：no sudden movement, no sudden pose change",
+    "一致性：consistent lighting, stable composition, steady exposure",
+    "运镜平滑：smooth camera motion, no jitter",
+    "时间锚点：首尾帧 + 中间锚点（25%/50%/75%）比只有首尾帧稳定"
+  ]
+}

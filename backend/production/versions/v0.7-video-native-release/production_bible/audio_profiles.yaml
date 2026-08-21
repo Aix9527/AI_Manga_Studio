@@ -1,0 +1,15 @@
+# 音频三层设计 v1
+layers:
+  narration: { engine: edge-tts, voice: zh-CN-XiaoxiaoNeural, rate: "+35%" }
+  ambience:
+    lab:      [server_low_freq, keyboard, current_hum]
+    street:   [rain, city_neon]
+    car:      [engine_rumble, low_noise]
+    corridor: [footsteps, echo, stone_dust]
+    underground: [low_freq_vibration]
+  music: { style: dark_cinematic_drone, root: [55Hz, 82.4Hz, 110Hz], climax: "drop-then-recover" }
+
+climax_rule:
+  gx_010: music -20%
+  gx_011: sudden drop (抽空)
+  gx_012: low freq recover x1.8

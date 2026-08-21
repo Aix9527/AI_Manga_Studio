@@ -1,0 +1,26 @@
+{
+  "scene_id": "scene_003",
+  "source_shot_id": "shot_03",
+  "shot": {
+    "id": "shot_03",
+    "scene_id": "scene_003",
+    "index": 2,
+    "shot_type": "close-up",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "白大褂平整地搭在椅背上。浅蓝色V领内搭在冷光灯下泛着干净的色调，锁骨窝的浅凹在领口上方若隐若现，颈线修长流畅。她整个人坐在那里的姿态——背脊挺直，肩不内扣，头不前倾——像一尊被精密校准过的雕塑。 桌角放着一只铝合金急救箱。同事常说她不像是搞古生物的，像个随时待命的急诊医生。她确实考过急救证——能在关键时刻伸手的人，才配得上“专业”这两个字。 此刻她正在做一件和急救无关的事。但某种意义上，也是在救人。",
+    "action": "白大褂平整地搭在椅背上。浅蓝色V领内搭在冷光灯下泛着干净的色调，锁骨窝的浅凹在领口上方若隐若现，颈线修长流畅。她整个人坐在那里的姿态——背脊挺直，肩不内扣，头不",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 4.0,
+    "character_ids": []
+  },
+  "section_context": {
+    "character_state": {},
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}

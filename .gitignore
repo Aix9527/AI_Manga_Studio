@@ -1,0 +1,77 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.pytest-*/
+.pytest-tmp-*/
+.pytest-task9-*/
+.pytest-production-*/
+.pytest-ltx23-*/
+
+# === Node / Frontend ===
+node_modules/
+dist/
+.vite/
+
+# === 产出与临时目录（仅保留核心源码） ===
+/outputs/
+/temp/
+/logs/
+/docs/
+/storage/
+/samples/
+/scripts/
+/production_release/
+/ai-manga-studio-v1.0.0-acceptance/
+/test_tmp/
+/_identity_frames/
+/assertion-projects/
+/assets/
+/data/
+/release/
+/versions/
+/migrations/
+/projects/
+/reference_repos/
+
+# === 工具与 Agent 缓存 ===
+/.superpowers/
+/.workbuddy/
+/.agents/
+/.trae-html-share-packages/
+/.codex_scan_draft/
+/.codex_validate_draft/
+/.comfy-smoke-logs/
+/.logs/
+
+# === 数据库与运行时 ===
+*.db
+*.db-shm
+*.db-wal
+
+# === 缓存与调试产物 ===
+.model_hash_cache.json
+debug_wan22_final.json
+
+# === 根目录产出 / 临时文件 ===
+/.codex_tmp_candidate_enrichment.json
+/core.db
+/creator-page.png.jpg
+/h3_12a_ids.json
+/h3_12a_prompts.json
+/h3_12b.json
+/h3_12b_results.json
+/h3_golden_ids.json
+/h3_gx002_prompt_id.txt
+/h3_test_prompt_id.txt
+/h3_v2_prompt_id.txt
+/migration_report.json
+/release_report.json
+/sandbox-probe.txt
+/task-4-report.md
+/temp_novel.txt
+/test_novel.txt
+/test_frame_check.png

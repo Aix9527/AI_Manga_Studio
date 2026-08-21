@@ -1,0 +1,18 @@
+# 苏小满 Su Xiaoman (Phase 6B 新角色)
+# 第四章：苏晚之女，被白砚行缚于石座作为人质
+name: 苏小满
+id: suxiaoman_v1
+role: daughter_human_asset
+appearance: |
+  Chinese girl, about 6-8 years old, small oval face, big dark eyes,
+  shoulder-length black hair, wears a simple blue field jacket
+key_features:
+  - "big dark eyes (大眼睛)"
+  - "short black hair (齐肩黑发)"
+  - "blue field jacket (蓝色外套)"
+state: "被缚于石座上，清醒、安静，无发绀，呼吸平稳"
+expression_baseline: "quiet calm, trusting, watches mother"
+expression_peak: "relief and tears when rescued"
+locks:
+  - "服装（蓝色外套）不得更换"
+  - "保持孩子面容，不得成人化"

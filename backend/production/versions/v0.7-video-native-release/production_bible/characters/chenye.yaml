@@ -1,0 +1,23 @@
+# 陈夜 — 角色锁 v1（Phase 4 验证通过）
+character:
+  name: 陈夜
+  role: 神秘调查员（30s）
+  prompt_lock: "Chen Ye, 30s Chinese male, black trench coat, short black hair, sharp eyes, lean face, calm investigator"
+
+face:
+  age: 35
+  hair: short black
+  jaw: sharp
+  eyes: calm mysterious
+
+wardrobe:
+  standard: { black_trench_coat: required }
+
+visual_tag: 低照度 / 车内光 / 侧脸 / 冷色（正式戏份保持此标签）
+
+forbidden:
+  - businessman_look
+  - age_change
+
+approved_shots: [gx_009]
+reference: gx_009 (基准镜)

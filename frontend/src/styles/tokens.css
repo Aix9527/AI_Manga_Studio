@@ -1,0 +1,105 @@
+/* AI 漫画工作台深色主题 */
+:root {
+  --color-bg-primary: #090d12;
+  --color-bg-secondary: #11161d;
+  --color-bg-tertiary: #171e27;
+  --color-surface: var(--color-bg-secondary);
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #94a1af;
+  --color-text-muted: #697687;
+  --color-text: var(--color-text-primary);
+  --color-accent: #8b5cf6;
+  --color-accent-hover: #a78bfa;
+  --color-success: #3ddc97;
+  --color-warning: #f2bd5a;
+  --color-danger: #ff6b6b;
+  --color-border: #2b3440;
+  --color-border-hover: #484f58;
+  --color-purple: #a371f7;
+  --color-cyan: #39d2c0;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-hover);
+}
+
+/* Stage pill colors */
+.stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.stage-pill--pending { background: #21262d; color: var(--color-text-muted); }
+.stage-pill--running { background: #1a3a5c; color: var(--color-accent); }
+.stage-pill--completed { background: #162b1a; color: var(--color-success); }
+.stage-pill--failed { background: #3a1414; color: var(--color-danger); }
+.stage-pill--review { background: #2e1a3a; color: var(--color-purple); }
+.stage-pill--invalidated { background: #2e2a1a; color: var(--color-warning); }
+
+/* Progress bar */
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--color-bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-bar__fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
+}
+.progress-bar__fill--success { background: var(--color-success); }
+.progress-bar__fill--warning { background: var(--color-warning); }
+.progress-bar__fill--danger { background: var(--color-danger); }

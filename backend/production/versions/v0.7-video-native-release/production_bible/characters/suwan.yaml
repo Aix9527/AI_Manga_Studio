@@ -1,0 +1,26 @@
+# 苏晚 — 角色锁 v1（Phase 4 验证通过，后续镜头必须完全复制）
+character:
+  name: 苏晚
+  role: 女主 / 基因考古学家
+  prompt_lock: "Su Wan, 28-year-old Chinese female genetic researcher, oval face, sharp phoenix eyes, shoulder-length black hair"
+
+face:
+  age: 28
+  face_shape: oval
+  eyes: phoenix (丹凤眼, sharp, deep brown)
+  skin: porcelain pale
+  hair: black shoulder-length
+
+wardrobe:
+  lab: { white_lab_coat: required, base: light_blue_vneck }
+  escape: { dark_athetic_jacket: required }
+  underground: { dark_utility_jacket, oxygen_mask }
+
+forbidden:
+  - hairstyle_change
+  - face_age_change
+  - eye_color_change
+  - plastic_skin
+
+approved_shots: [gx_003, gx_005, gx_006, gx_008, gx_011]
+reference: gx_003 (基准镜)

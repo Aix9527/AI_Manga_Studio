@@ -1,0 +1,32 @@
+{
+  "scene_id": "scene_008",
+  "source_shot_id": "shot_08",
+  "shot": {
+    "id": "shot_08",
+    "scene_id": "scene_008",
+    "index": 7,
+    "shot_type": "close-up",
+    "camera_angle": "eye-level",
+    "camera_movement": "static",
+    "description": "“苏博士，晚上好。我想我们很快就会见面了。” 苏晚握紧手机，指甲掐进掌心。但她的声音依然平稳。 “你敢动她一根头发——” “她的每一根头发，对我来说都是无价之宝。”那个声音轻轻笑了一声。“我不会伤害她。我只需要她的心脏。冬至日。归墟。你一个人来。七十二小时。” 电话挂断。 苏晚翻到通讯录最底端，找到一个从未打过但一直存在的号码。 联系人：陈夜。备注：别打。 “我是陈夜。” “方老师死了。我女儿被带走了。归墟。”她的声音干涩但条理清晰，每一个信息点都精准传递。“我需要你的帮助。”",
+    "action": "苏博士，晚上好。我想我们很快就会见面了。 苏晚握紧手机，指甲掐进掌心。但她的声音依然平稳。 你敢动她一根头发—— 她的每一根头发，对我来说都是无价之宝。那个声音",
+    "dialogue": "",
+    "emotion": "tense",
+    "duration": 4.0,
+    "character_ids": [
+      "suwan",
+      "chenye"
+    ]
+  },
+  "section_context": {
+    "character_state": {
+      "suwan": "角色苏晚的视觉设定",
+      "chenye": "角色陈夜的视觉设定"
+    },
+    "visual_theme": {
+      "palette": "幽暗石质",
+      "texture": "古旧"
+    },
+    "emotion": "tense"
+  }
+}
