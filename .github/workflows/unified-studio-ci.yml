@@ -53,7 +53,7 @@ jobs:
               echo '### CI Vitest failure diagnostics'
               echo
               echo '```text'
-              tail -n 180 /tmp/vitest.log
+              grep -E -B 3 -A 12 'FAIL|AssertionError|TestingLibraryElementError|Unable to find|Found multiple|expected|Test Files|Tests ' /tmp/vitest.log | tail -n 160 || tail -n 120 /tmp/vitest.log
               echo '```'
             } >/tmp/vitest-comment.md
             gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file /tmp/vitest-comment.md
