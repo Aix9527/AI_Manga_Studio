@@ -1,0 +1,42 @@
+name: Frontend Dependency Upgrade Probe
+
+on:
+  push:
+    branches:
+      - "feat/unified-local-studio"
+    paths:
+      - ".github/workflows/dependency-upgrade-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate secure dependency set
+        run: |
+          npm install react-router-dom@7.18.0
+          npm install --save-dev vite@8.2.2 vitest@4.1.11 @vitejs/plugin-react@latest
+          npm audit fix || true
+      - name: Post-upgrade audit
+        run: npm audit --json || true
+      - name: Emit upgraded manifests
+        run: |
+          echo "PACKAGE_JSON_GZIP_BASE64_BEGIN"
+          gzip -c package.json | base64 -w0
+          echo
+          echo "PACKAGE_JSON_GZIP_BASE64_END"
+          echo "PACKAGE_LOCK_GZIP_BASE64_BEGIN"
+          gzip -c package-lock.json | base64 -w0
+          echo
+          echo "PACKAGE_LOCK_GZIP_BASE64_END"
