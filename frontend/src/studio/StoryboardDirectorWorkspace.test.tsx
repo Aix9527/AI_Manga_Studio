@@ -161,7 +161,7 @@ describe("StoryboardDirectorWorkspace", () => {
   it("approves the current keyframe to continue into video generation", async () => {
     const user = userEvent.setup();
     render(<StoryboardDirectorWorkspace />);
-    await screen.findByRole("img", { name: "建立镜头" });
+    await screen.findAllByRole("img", { name: "建立镜头" });
 
     const generate = screen.getByRole("button", { name: /生成视频/ });
     expect(generate).toBeEnabled();
@@ -179,7 +179,7 @@ describe("StoryboardDirectorWorkspace", () => {
   it("retries the exact waiting-review asset when retaking the shot", async () => {
     const user = userEvent.setup();
     render(<StoryboardDirectorWorkspace />);
-    await screen.findByRole("img", { name: "建立镜头" });
+    await screen.findAllByRole("img", { name: "建立镜头" });
 
     await user.click(screen.getByRole("button", { name: /重拍镜头/ }));
 
@@ -192,7 +192,7 @@ describe("StoryboardDirectorWorkspace", () => {
   it("disables review actions when the selected asset is no longer the active review step", async () => {
     jobState.jobs = new Map([["job-a", waitingReviewJob("completed")]]);
     render(<StoryboardDirectorWorkspace />);
-    await screen.findByRole("img", { name: "建立镜头" });
+    await screen.findAllByRole("img", { name: "建立镜头" });
 
     expect(screen.getByRole("button", { name: /生成视频/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /重拍镜头/ })).toBeDisabled();
