@@ -91,7 +91,7 @@ const StoryboardDirectorWorkspace: React.FC = () => {
     try {
       await workspaceApi.regenerateAsset(projectId, selectedAsset.id);
       await refreshJob(selectedAsset.job_id);
-      setMessage(`已为 ${selected.title} 创建重新生成任务`);
+      setMessage(`已为${selected.title}创建重新生成任务`);
     } catch (error) {
       setMessage(userMessage(error));
     }
