@@ -8,6 +8,12 @@ import { useWorkspaceStore } from "@/state/workspaceStore";
 import type { JobDetail } from "@/types/jobs";
 import type { ProjectAsset } from "@/workbench/types";
 
+interface TimelineItem {
+  id: number;
+  label: string;
+  selectable: boolean;
+}
+
 const TimelineQcWorkspace: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const projectId = snapshot?.project_id || useWorkspaceStore.getState().projectId || "default";
@@ -34,6 +40,20 @@ const TimelineQcWorkspace: React.FC = () => {
     () => assets.filter((asset) => asset.kind.includes("video") || asset.kind.includes("image") || asset.kind.includes("composition")),
     [assets],
   );
+  const timelineItems = useMemo<TimelineItem[]>(() => {
+    if (mediaAssets.length) {
+      return mediaAssets.map((asset, index) => ({
+        id: asset.id,
+        label: asset.shot_id || asset.scene_id || `镜头 ${index + 1}`,
+        selectable: true,
+      }));
+    }
+    return Array.from({ length: 8 }, (_, index) => ({
+      id: -(index + 1),
+      label: `镜头 ${index + 1}`,
+      selectable: false,
+    }));
+  }, [mediaAssets]);
   const jobs = jobStore.recentIds
     .map((id) => jobStore.jobs.get(id))
     .filter((job): job is JobDetail => Boolean(job));
@@ -60,11 +80,15 @@ const TimelineQcWorkspace: React.FC = () => {
           <div className="inspector-section">
             <div className="timeline-ruler"><span>00:00</span><span>00:15</span><span>00:30</span><span>00:45</span><span>01:00</span><span>01:15</span><span>01:30</span></div>
             <div className="timeline-track">
-              {(mediaAssets.length ? mediaAssets : Array.from({ length: 8 })).map((asset, index) => {
-                const id = asset && typeof asset === "object" && "id" in asset ? asset.id : -(index + 1);
-                const shot = asset && typeof asset === "object" && "shot_id" in asset ? asset.shot_id : `镜头 ${index + 1}`;
-                return <button key={id} type="button" className={`timeline-block${selectedId === id ? " is-active" : ""}`} onClick={() => id > 0 && setSelectedId(id)}>{shot || String(index + 1).padStart(2, "0")}</button>;
-              })}
+              {timelineItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`timeline-block${selectedId === item.id ? " is-active" : ""}`}
+                  disabled={!item.selectable}
+                  onClick={() => item.selectable && setSelectedId(item.id)}
+                >{item.label}</button>
+              ))}
             </div>
           </div>
         </section>
