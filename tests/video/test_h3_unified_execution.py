@@ -101,6 +101,26 @@ async def test_staging_rewrites_local_media_to_comfy_input_references(tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_staging_uploads_same_local_source_once_and_reuses_reference(tmp_path: Path) -> None:
+    tail = tmp_path / "tail.png"
+    tail.write_bytes(b"tail")
+    adapter = FakeComfyAdapter()
+    request = H3UnifiedRequest(
+        mode=H3Mode.REF2VA,
+        prompt="连续动作",
+        references=H3ReferenceBundle(storyboard=str(tail)),
+        first_frame=str(tail),
+        duration_seconds=5,
+    )
+
+    staged = await stage_h3_unified_request(request, adapter, subfolder="h3/continuity")
+
+    assert staged.references.storyboard == "h3/continuity/tail.png"
+    assert staged.first_frame == "h3/continuity/tail.png"
+    assert adapter.uploads == [("image", "tail.png", "h3/continuity")]
+
+
+@pytest.mark.asyncio
 async def test_h3_media_adapter_exposes_video_and_audio_uploads_via_generic_input_route(monkeypatch) -> None:
     adapter = H3ComfyMediaAdapter()
     calls: list[tuple[str, str, str]] = []
