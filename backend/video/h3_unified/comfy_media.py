@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from backend.production.comfy_adapter import (
+    ComfyArtifact,
     ComfyCompletedWorkflow,
     ComfyImageReference,
     ComfyUIAdapter,
@@ -35,6 +36,12 @@ class H3ComfyMediaAdapter:
 
     async def wait_for_completion(self, prompt_id: str) -> dict[str, Any]:
         return await self.base.wait_for_completion(prompt_id)
+
+    def first_artifact(self, outputs: dict[str, Any]) -> ComfyArtifact:
+        return self.base.first_artifact(outputs)
+
+    async def download_artifact(self, artifact: ComfyArtifact) -> bytes:
+        return await self.base.download_artifact(artifact)
 
     async def upload_image(
         self,
