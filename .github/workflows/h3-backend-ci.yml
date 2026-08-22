@@ -8,6 +8,7 @@ on:
       - "backend/core/runtime/router.py"
       - "backend/api/runtime_api.py"
       - "tests/video/test_h3_unified*.py"
+      - "requirements.txt"
       - ".github/workflows/h3-backend-ci.yml"
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - "backend/core/runtime/router.py"
       - "backend/api/runtime_api.py"
       - "tests/video/test_h3_unified*.py"
+      - "requirements.txt"
       - ".github/workflows/h3-backend-ci.yml"
 
 permissions:
