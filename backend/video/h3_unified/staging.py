@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from .reference_bundle import H3ReferenceBundle
@@ -13,32 +14,39 @@ async def stage_h3_unified_request(
     *,
     subfolder: str = "h3_unified",
 ) -> H3UnifiedRequest:
-    """Upload all local H3 reference media and return an immutable staged copy."""
+    """Upload local H3 media once per source and return an immutable staged copy."""
+
+    cache: dict[tuple[str, str], str] = {}
+
+    async def staged_reference(kind: str, path: str) -> str:
+        key = (kind, _source_key(path))
+        if key in cache:
+            return cache[key]
+        uploader = getattr(adapter, f"upload_{kind}")
+        reference = await uploader(path, subfolder=subfolder)
+        cache[key] = reference.reference
+        return reference.reference
 
     staged_images: dict[str, str] = {}
     for field, path in request.references.image_references():
-        reference = await adapter.upload_image(path, subfolder=subfolder)
-        staged_images[field] = reference.reference
+        staged_images[field] = await staged_reference("image", path)
 
-    staged_videos = []
-    for path in request.references.videos:
-        reference = await adapter.upload_video(path, subfolder=subfolder)
-        staged_videos.append(reference.reference)
-
-    staged_audios = []
-    for path in request.references.audios:
-        reference = await adapter.upload_audio(path, subfolder=subfolder)
-        staged_audios.append(reference.reference)
+    staged_videos = [
+        await staged_reference("video", path)
+        for path in request.references.videos
+    ]
+    staged_audios = [
+        await staged_reference("audio", path)
+        for path in request.references.audios
+    ]
 
     first_frame = request.first_frame
     if first_frame:
-        first_reference = await adapter.upload_image(first_frame, subfolder=subfolder)
-        first_frame = first_reference.reference
+        first_frame = await staged_reference("image", first_frame)
 
     last_frame = request.last_frame
     if last_frame:
-        last_reference = await adapter.upload_image(last_frame, subfolder=subfolder)
-        last_frame = last_reference.reference
+        last_frame = await staged_reference("image", last_frame)
 
     staged_bundle = H3ReferenceBundle(
         **staged_images,
@@ -51,3 +59,9 @@ async def stage_h3_unified_request(
         first_frame=first_frame,
         last_frame=last_frame,
     )
+
+
+def _source_key(path: str) -> str:
+    """Use a stable local-path identity without requiring the file to exist twice."""
+
+    return str(Path(path).expanduser().resolve(strict=False))
