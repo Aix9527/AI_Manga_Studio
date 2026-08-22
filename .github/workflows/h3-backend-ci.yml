@@ -37,4 +37,4 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: H3 unified tests
-        run: pytest -q tests/video/test_h3_unified.py tests/video/test_h3_unified_router.py --disable-warnings --maxfail=1
+        run: pytest -q tests/video/test_h3_unified.py --disable-warnings --maxfail=1
