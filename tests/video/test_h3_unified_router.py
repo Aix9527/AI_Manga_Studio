@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from backend.api.runtime_api import h3_segment_plan, h3_unified_state
+import pytest
+
+import backend.api.runtime_api as runtime_api
+from backend.api.runtime_api import h3_segment_plan, h3_unified_preflight, h3_unified_state
 from backend.core.runtime.router import ModelRouter
 
 
@@ -69,3 +72,23 @@ def test_runtime_api_builds_segment_plan_with_frame_fallback() -> None:
     assert [item["duration_seconds"] for item in plan["segments"]] == [10, 7, 5]
     assert plan["continuity"] == "frame_reference"
     assert plan["dual_sample"] is False
+
+
+@pytest.mark.asyncio
+async def test_runtime_preflight_reads_live_comfy_node_catalogue(monkeypatch) -> None:
+    async def fake_object_info(self):
+        return {
+            "LtoJ_H3UnifiedControlDesk": {},
+            "MiniMaxH3MotionContextLoadLatent": {},
+            "MiniMaxH3MotionContext": {},
+            "MiniMaxH3MotionContextTrim": {},
+            "MiniMaxH3MotionContextSaveLatent": {},
+        }
+
+    monkeypatch.setattr(runtime_api.ComfyUIAdapter, "get_object_info", fake_object_info)
+
+    status = await h3_unified_preflight()
+
+    assert status["external_unified_available"] is True
+    assert status["latent_continuity_available"] is True
+    assert status["recommended_runtime"] == "external_unified"
