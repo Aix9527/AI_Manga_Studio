@@ -16,16 +16,16 @@ from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.repository import JobRepository
 from backend.orchestration.service import JobService
 from backend.orchestration.task_queue import TaskQueue
-from backend.orchestration.worker import OrchestratorWorker, StageExecutor, SSEBroadcaster, TaskRunner
+from backend.orchestration.worker import OrchestratorWorker, StageExecutor, SSEBroadcaster
 from backend.novel_video.recovery import (
     RECONCILIATION_ACTIVE_STATUSES,
     RunReconciler,
     fetch_active_comfy_prompt_ids,
 )
 from backend.novel_video.h3_provider import reconcile_emergency_prompt_journals
+from backend.novel_video.h3_unified_runtime import H3UnifiedNovelVideoRunner, H3UnifiedTaskRunner
 from backend.novel_video.repository import NovelVideoRepository
 from backend.novel_video.service import NovelVideoService
-from backend.novel_video.runner import NovelVideoRunner
 from backend.novel_video.provider_factory import build_formal_novel_video_router_factory
 from backend.novel_video.routes import NovelVideoIngressLimitMiddleware, ProxyNonceCache
 from backend.novel_video.capability import remove_desktop_capability, write_desktop_capability
@@ -120,7 +120,7 @@ async def lifespan(app: FastAPI):
         projects_root=projects_root, job_service=service,
     )
     task_queue = TaskQueue(root="storage/tasks")
-    task_runner = TaskRunner(
+    task_runner = H3UnifiedTaskRunner(
         task_queue, broadcaster, config, workdir="storage/chains",
         novel_video_repository=novel_video_repo,
         formal_router_factory=build_formal_novel_video_router_factory(novel_video_repo),
@@ -174,7 +174,7 @@ async def lifespan(app: FastAPI):
     )
     # The scheduler only enqueues; TaskRunner remains the sole ComfyUI/GPU
     # executor and retains prompt recovery plus global locking authority.
-    novel_video_runner = NovelVideoRunner(
+    novel_video_runner = H3UnifiedNovelVideoRunner(
         service=novel_video_service,
         task_queue=task_queue,
     )
