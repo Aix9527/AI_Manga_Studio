@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.novel_video.h3_frames import legal_h3_frames
+from backend.novel_video.h3_unified_runtime import H3UnifiedNovelVideoRunner, H3UnifiedTaskRunner
 from backend.novel_video.models import (
     AssetVersion,
     AspectRatio,
@@ -19,11 +20,9 @@ from backend.novel_video.models import (
     ShotRecord,
 )
 from backend.novel_video.repository import NovelVideoRepository
-from backend.novel_video.runner import NovelVideoRunner
 from backend.novel_video.service import NovelVideoService
 from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.task_queue import TaskQueue
-from backend.orchestration.worker import TaskRunner
 
 
 def _asset(
@@ -134,12 +133,12 @@ def formal_assets(tmp_path: Path):
     repo.save_shot(shot)
     queue = TaskQueue(root=tmp_path / "tasks")
     service = NovelVideoService(repo=repo, projects_root=tmp_path)
-    scheduler = NovelVideoRunner(service=service, task_queue=queue)
+    scheduler = H3UnifiedNovelVideoRunner(service=service, task_queue=queue)
     return repo, project, run, shot, queue, scheduler, motion, voice
 
 
 def test_scheduler_persists_verified_video_and_audio_reference_paths(formal_assets) -> None:
-    repo, _project, run, shot, queue, scheduler, motion, voice = formal_assets
+    _repo, _project, run, shot, queue, scheduler, motion, voice = formal_assets
 
     scheduler._enqueue_formal_task(run, shot)
 
@@ -166,7 +165,7 @@ def test_worker_rejects_tampered_formal_media_paths(
     payload = dict(task.payload)
     payload[field] = [str(forged)]
     task = replace(task, payload=payload)
-    runner = TaskRunner(
+    runner = H3UnifiedTaskRunner(
         queue,
         SimpleNamespace(),
         SimpleNamespace(),
@@ -183,7 +182,7 @@ def test_worker_builds_formal_request_with_verified_video_and_audio_paths(formal
     repo, _project, run, shot, queue, scheduler, motion, voice = formal_assets
     scheduler._enqueue_formal_task(run, shot)
     task = queue.list()[0]
-    runner = TaskRunner(
+    runner = H3UnifiedTaskRunner(
         queue,
         SimpleNamespace(),
         SimpleNamespace(),
