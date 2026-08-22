@@ -65,9 +65,12 @@ def formal_assets(tmp_path: Path):
         project_id=project.id,
         chapter_indexes=[1],
         mode=ProductionMode.ONE_CLICK,
-        status=RunStatus.RENDERING,
     )
     repo.save_run(run)
+    repo.update_run_status(run.id, RunStatus.PLANNING)
+    repo.update_run_status(run.id, RunStatus.RENDERING)
+    run = repo.get_run(run.id)
+    assert run is not None and run.status is RunStatus.RENDERING
 
     character = _asset(
         repo,
