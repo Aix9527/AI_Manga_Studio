@@ -8,9 +8,11 @@ from backend.core.runtime.providers.h3 import H3Provider
 from backend.core.runtime.router import ModelRouter
 from backend.core.runtime.scheduler import scheduler
 from backend.core.runtime.workflow_registry import WorkflowRegistry
+from backend.production.comfy_adapter import ComfyUIAdapter
 from backend.video.h3_unified.reference_bundle import H3ReferenceBundle
 from backend.video.h3_unified.segmented import H3SegmentPolicy, build_segment_plan
 from backend.video.h3_unified.ui_state import H3Mode, H3UnifiedRequest, build_ui_state
+from backend.video.providers.minimax_h3_unified_provider import H3UnifiedProvider
 
 
 router = APIRouter()
@@ -55,6 +57,14 @@ def h3_validate():
             "profile": "production",
         }
     )
+
+
+@router.get("/h3/unified/preflight")
+async def h3_unified_preflight():
+    """Inspect the live local ComfyUI node catalogue for optional H3 capabilities."""
+
+    object_info = await ComfyUIAdapter().get_object_info()
+    return H3UnifiedProvider().preflight(object_info)
 
 
 @router.post("/h3/unified/state")
