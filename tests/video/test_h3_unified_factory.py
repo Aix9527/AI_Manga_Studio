@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from backend.main import build_formal_novel_video_router_factory
+from backend.novel_video.provider_factory import build_formal_novel_video_router_factory
 from backend.novel_video.h3_provider import H3Ref2VASegmentProvider
 from backend.video.h3_unified.formal_provider import H3UnifiedFormalSegmentProvider
 
