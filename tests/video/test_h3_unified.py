@@ -7,6 +7,7 @@ import pytest
 from backend.video.h3_unified.reference_bundle import H3ReferenceBundle
 from backend.video.h3_unified.segmented import H3SegmentPolicy, build_segment_plan
 from backend.video.h3_unified.ui_state import H3Mode, H3UnifiedRequest, build_ui_state
+from backend.video.providers.minimax_h3_unified_provider import H3UnifiedProvider
 
 
 def test_reference_bundle_keeps_nine_semantic_slots_in_stable_order() -> None:
@@ -129,3 +130,46 @@ def test_segment_policy_allows_dual_sample_only_as_explicit_opt_in() -> None:
 
     assert default_policy.dual_sample is False
     assert dual_policy.dual_sample is True
+
+
+def test_provider_preflight_detects_external_unified_and_v6_motion_context_nodes() -> None:
+    object_info = {
+        "LtoJ_H3UnifiedControlDesk": {},
+        "MiniMaxH3MotionContextLoadLatent": {},
+        "MiniMaxH3MotionContext": {},
+        "MiniMaxH3MotionContextTrim": {},
+        "MiniMaxH3MotionContextSaveLatent": {},
+    }
+
+    status = H3UnifiedProvider().preflight(object_info)
+
+    assert status["external_unified_available"] is True
+    assert status["latent_continuity_available"] is True
+    assert status["recommended_runtime"] == "external_unified"
+    assert status["missing_motion_context_nodes"] == []
+
+
+def test_provider_preflight_falls_back_to_native_h3_when_external_node_is_missing() -> None:
+    status = H3UnifiedProvider().preflight({"MiniMaxH3ReferenceToVideo": {}})
+
+    assert status["external_unified_available"] is False
+    assert status["recommended_runtime"] == "native_h3"
+    assert "LtoJ_H3UnifiedControlDesk" in status["missing_nodes"]
+
+
+def test_provider_builds_single_node_external_workflow_with_serialized_ui_state() -> None:
+    request = H3UnifiedRequest(
+        mode=H3Mode.FL2VA,
+        prompt="人物向镜头冲来",
+        first_frame="first.png",
+        last_frame="last.png",
+        duration_seconds=6,
+    )
+
+    workflow = H3UnifiedProvider().build_external_workflow(request)
+
+    assert workflow["1"]["class_type"] == "LtoJ_H3UnifiedControlDesk"
+    state = json.loads(workflow["1"]["inputs"]["ui_state"])
+    assert state["director"]["mode"] == "FL2VA"
+    assert state["assets"]["first_frame"]["filename"] == "first.png"
+    assert state["assets"]["last_frame"]["filename"] == "last.png"
