@@ -62,13 +62,16 @@ def _package() -> H3ReferencePackage:
 
 
 def _segment_request(tmp_path: Path) -> H3SegmentRequest:
+    picture_paths = (
+        tmp_path / "tail.png",
+        tmp_path / "character.png",
+        tmp_path / "scene.png",
+    )
+    for path in picture_paths:
+        path.write_bytes(b"approved-picture")
     return H3SegmentRequest(
         package=_package(),
-        picture_paths=(
-            tmp_path / "tail.png",
-            tmp_path / "character.png",
-            tmp_path / "scene.png",
-        ),
+        picture_paths=picture_paths,
         output_video=tmp_path / "final.mp4",
         output_tail=tmp_path / "tail-out.png",
     )
