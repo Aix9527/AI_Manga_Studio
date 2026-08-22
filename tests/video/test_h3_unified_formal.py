@@ -54,9 +54,10 @@ def _package() -> H3ReferencePackage:
         height=832,
         aspect_ratio=AspectRatio.PORTRAIT,
         picture_asset_version_ids=["pic-tail", "pic-char", "pic-scene"],
-        video_reference_asset_version_ids=["vid-motion"],
-        audio_reference_asset_version_ids=["aud-voice"],
+        video_reference_asset_version_ids=[],
+        audio_reference_asset_version_ids=[],
         workflow_version="h3_unified",
+        continuity_reason="same_action",
     )
 
 
@@ -68,21 +69,13 @@ def _segment_request(tmp_path: Path) -> H3SegmentRequest:
             tmp_path / "character.png",
             tmp_path / "scene.png",
         ),
-        video_paths=(tmp_path / "motion.mp4",),
-        audio_paths=(tmp_path / "voice.wav",),
         output_video=tmp_path / "final.mp4",
         output_tail=tmp_path / "tail-out.png",
     )
 
 
-def test_segment_request_carries_video_and_audio_reference_paths(tmp_path: Path) -> None:
-    request = _segment_request(tmp_path)
-    assert request.video_paths == (tmp_path / "motion.mp4",)
-    assert request.audio_paths == (tmp_path / "voice.wav",)
-
-
 @pytest.mark.asyncio
-async def test_formal_provider_maps_package_refs_to_unified_request_and_checkpoints_identity(tmp_path: Path, monkeypatch) -> None:
+async def test_formal_provider_maps_approved_picture_package_to_unified_request_and_checkpoints_identity(tmp_path: Path, monkeypatch) -> None:
     execution = FakeExecutionService()
     provider = H3UnifiedFormalSegmentProvider(
         adapter=FakeMediaAdapter(),
@@ -112,8 +105,8 @@ async def test_formal_provider_maps_package_refs_to_unified_request_and_checkpoi
     assert unified_request.references.character_identity == str(tmp_path / "character.png")
     assert unified_request.references.location == str(tmp_path / "scene.png")
     assert unified_request.references.storyboard == str(tmp_path / "tail.png")
-    assert unified_request.references.videos == (str(tmp_path / "motion.mp4"),)
-    assert unified_request.references.audios == (str(tmp_path / "voice.wav"),)
+    assert unified_request.references.videos == ()
+    assert unified_request.references.audios == ()
     assert unified_request.first_frame == str(tmp_path / "tail.png")
     assert kwargs["subfolder"].startswith("h3_unified/formal/")
     assert result is expected
