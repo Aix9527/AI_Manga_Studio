@@ -16,16 +16,17 @@ from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.repository import JobRepository
 from backend.orchestration.service import JobService
 from backend.orchestration.task_queue import TaskQueue
-from backend.orchestration.worker import OrchestratorWorker, StageExecutor, SSEBroadcaster, TaskRunner
+from backend.orchestration.worker import OrchestratorWorker, StageExecutor, SSEBroadcaster
 from backend.novel_video.recovery import (
     RECONCILIATION_ACTIVE_STATUSES,
     RunReconciler,
     fetch_active_comfy_prompt_ids,
 )
 from backend.novel_video.h3_provider import reconcile_emergency_prompt_journals
+from backend.novel_video.h3_unified_runtime import H3UnifiedNovelVideoRunner, H3UnifiedTaskRunner
 from backend.novel_video.repository import NovelVideoRepository
 from backend.novel_video.service import NovelVideoService
-from backend.novel_video.runner import NovelVideoRunner
+from backend.novel_video.provider_factory import build_formal_novel_video_router_factory
 from backend.novel_video.routes import NovelVideoIngressLimitMiddleware, ProxyNonceCache
 from backend.novel_video.capability import remove_desktop_capability, write_desktop_capability
 from backend.migration.scanner import ProjectScanner
@@ -69,45 +70,6 @@ from backend.production_v1 import routes as production_v1_api
 from backend.creative import routes as creative_api
 from backend.studio_v2 import routes as v1_phases_api
 from backend.api.router import api_router
-
-
-def build_formal_novel_video_router_factory(novel_video_repo: NovelVideoRepository):
-    """Build providers lazily for a queued formal segment without probing ComfyUI at startup."""
-    def factory(*, allow_wan_fallback: bool, project, payload: dict):
-        from backend.novel_video.h3_provider import H3Ref2VASegmentProvider
-        from backend.novel_video.video_router import NovelVideoRouter
-        from backend.production.comfy_adapter import ComfyUIAdapter
-        from backend.production.comfy_video import WanVideoProvider
-        from backend.production.workflow_registry import select_wan_video_workflow
-        from backend.production.workflow_templates import WorkflowTemplate
-
-        workflows = Path(__file__).resolve().parent / "production" / "workflows"
-        # Formal production never accepts a task-supplied host; this subplan is local-only.
-        adapter = ComfyUIAdapter(base_url="http://127.0.0.1:8188")
-        h3 = H3Ref2VASegmentProvider(
-            adapter=adapter,
-            template=WorkflowTemplate.load(workflows / "h3" / "reference.json"),
-            asset_resolver=lambda asset_id: _scoped_asset(novel_video_repo, asset_id, project.id, str(payload["run_id"])),
-            # This is lazy: the configured local catalogue is fetched only at
-            # formal submission time, never during application startup.
-            object_info_fetcher=adapter.get_object_info,
-        )
-        wan = None
-        if allow_wan_fallback:
-            spec = select_wan_video_workflow(has_end_frame=False)
-            wan = WanVideoProvider(
-                adapter=adapter,
-                template=WorkflowTemplate.load(workflows / spec.path.name),
-            )
-        return NovelVideoRouter(h3=h3, wan=wan, allow_wan_fallback=allow_wan_fallback)
-
-    return factory
-
-
-def _scoped_asset(repository: NovelVideoRepository, asset_id: str, project_id: str, run_id: str):
-    """Resolve only an approved project asset; continuity compiler restricts tails."""
-    asset = repository.get_asset(asset_id)
-    return asset if asset and asset.project_id == project_id and asset.state == "approved" else None
 
 
 @asynccontextmanager
@@ -158,7 +120,7 @@ async def lifespan(app: FastAPI):
         projects_root=projects_root, job_service=service,
     )
     task_queue = TaskQueue(root="storage/tasks")
-    task_runner = TaskRunner(
+    task_runner = H3UnifiedTaskRunner(
         task_queue, broadcaster, config, workdir="storage/chains",
         novel_video_repository=novel_video_repo,
         formal_router_factory=build_formal_novel_video_router_factory(novel_video_repo),
@@ -212,7 +174,7 @@ async def lifespan(app: FastAPI):
     )
     # The scheduler only enqueues; TaskRunner remains the sole ComfyUI/GPU
     # executor and retains prompt recovery plus global locking authority.
-    novel_video_runner = NovelVideoRunner(
+    novel_video_runner = H3UnifiedNovelVideoRunner(
         service=novel_video_service,
         task_queue=task_queue,
     )
