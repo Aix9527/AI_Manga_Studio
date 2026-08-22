@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from backend.production.comfy_adapter import ComfyCompletedWorkflow, ComfyImageReference, ComfyUIAdapter
+from backend.production.comfy_adapter import ComfyCompletedWorkflow, ComfyImageReference
+from backend.video.h3_unified.comfy_media import H3ComfyMediaAdapter
 from backend.video.h3_unified.execution import H3UnifiedExecutionService, H3UnifiedUnavailableError
 from backend.video.h3_unified.reference_bundle import H3ReferenceBundle
 from backend.video.h3_unified.staging import stage_h3_unified_request
@@ -100,8 +101,8 @@ async def test_staging_rewrites_local_media_to_comfy_input_references(tmp_path: 
 
 
 @pytest.mark.asyncio
-async def test_comfy_adapter_exposes_video_and_audio_uploads_via_generic_input_route(monkeypatch) -> None:
-    adapter = ComfyUIAdapter()
+async def test_h3_media_adapter_exposes_video_and_audio_uploads_via_generic_input_route(monkeypatch) -> None:
+    adapter = H3ComfyMediaAdapter()
     calls: list[tuple[str, str, str]] = []
 
     async def fake_upload_input(path, subfolder="novel_video", *, media_kind="file"):
