@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V7 Launcher — one command to start the full stack (backend + frontend)."""
+"""v0.8 launcher — one command to start the local backend and frontend."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 def main():
     print("=" * 50)
-    print("AI Manga Studio v0.7 — 长篇小说 → CG AI 视频")
+    print("AI Manga Studio v0.8 — 长篇小说 → CG AI 视频")
     print("=" * 50)
 
     root_dir = Path(__file__).parent
@@ -23,7 +23,7 @@ def main():
     print("\n[1/2] Starting backend (FastAPI + Orchestrator)...")
     backend_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app",
-         "--host", "0.0.0.0", "--port", "8000"],
+         "--host", "127.0.0.1", "--port", "8000"],
         cwd=str(root_dir),
     )
 

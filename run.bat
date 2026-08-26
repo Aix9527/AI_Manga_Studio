@@ -119,8 +119,8 @@ echo   Waiting for backend to start...
 timeout /t 3 /nobreak >nul
 
 REM --- Frontend ---
-if exist "frontend\package.json" goto :frontend_dev
 if exist "frontend\dist\index.html" goto :frontend_dist
+if exist "frontend\package.json" goto :frontend_dev
 goto :frontend_none
 
 :frontend_dist
