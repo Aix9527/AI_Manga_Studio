@@ -19,7 +19,7 @@ on:
       - ".github/workflows/h3-backend-ci.yml"
   push:
     branches:
-      - "feat/h3-unified-segmented-runtime"
+      - "master"
     paths:
       - "backend/video/h3_unified/**"
       - "backend/video/providers/minimax_h3_unified_provider.py"
