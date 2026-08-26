@@ -49,7 +49,8 @@ def test_setup_bat_uses_reproducible_frontend_install_and_real_commands() -> Non
     assert "call npm install" in text
     assert "python -m backend.cli diagnose" in text
     assert "python -m backend.cli generate -i novel.txt -o output.mp4" in text
-    assert "python tools\\h3_unified_live_gate.py" in text
+    assert "verify_h3.bat preflight" in text
+    assert "verify_h3.bat" in text
     assert "run.bat diagnose" not in text
     assert "run.bat generate" not in text
 
