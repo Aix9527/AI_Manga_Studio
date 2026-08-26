@@ -78,3 +78,33 @@ def test_verify_h3_bat_supports_preflight_only_mode() -> None:
     assert 'if /I "%~1"=="preflight" goto :verify_passed' in text
     assert "verify_h3.bat preflight" in text
     assert "verify_h3.bat" in text
+
+
+def test_verify_release_bat_runs_code_gates_before_optional_hardware() -> None:
+    text = _read("verify_release.bat")
+
+    launcher = "python -m pytest -q tests/test_local_launchers.py"
+    h3 = "python -m pytest -q tests/video/test_h3_unified.py"
+    frontend = "call npm run typecheck"
+    hardware = "call verify_h3.bat"
+
+    assert launcher in text
+    assert h3 in text
+    assert frontend in text
+    assert "call npm test -- --run" in text
+    assert "call npm run build" in text
+    assert text.index(launcher) < text.index(h3) < text.index(frontend) < text.index(hardware)
+    assert "if errorlevel 1 goto :release_failed" in text
+    assert "exit /b 1" in text
+
+
+def test_verify_release_bat_defaults_to_safe_code_only_and_has_explicit_modes() -> None:
+    text = _read("verify_release.bat")
+
+    assert 'if /I "%~1"=="full" goto :hardware_full' in text
+    assert 'if /I "%~1"=="preflight" goto :hardware_preflight' in text
+    assert 'if "%~1"=="" goto :release_passed' in text
+    assert "call verify_h3.bat preflight" in text
+    assert "call verify_h3.bat" in text
+    assert "verify_release.bat full" in text
+    assert "verify_release.bat preflight" in text
