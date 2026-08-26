@@ -19,7 +19,7 @@ if errorlevel 1 (
     goto :release_failed
 )
 
-npm --version >nul 2>&1
+call npm --version >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Node.js/npm not found.
     goto :release_failed
