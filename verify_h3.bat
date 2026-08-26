@@ -55,17 +55,17 @@ exit /b 0
 echo.
 echo  Usage:
 echo    verify_h3.bat
- echo      Run Gate A, then submit the 5-second Gate B smoke generation.
+echo      Run Gate A, then submit the 5-second Gate B smoke generation.
 echo.
 echo    verify_h3.bat preflight
- echo      Run Gate A only. No generation is submitted.
+echo      Run Gate A only. No generation is submitted.
 exit /b 0
 
 :usage_failed
 echo.
 echo  Usage:
 echo    verify_h3.bat
- echo    verify_h3.bat preflight
+echo    verify_h3.bat preflight
 exit /b 2
 
 :verify_failed
