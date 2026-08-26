@@ -32,14 +32,13 @@ def test_setup_bat_fails_closed_for_core_install_and_build_errors() -> None:
 
     assert "python -m pip install -r requirements.txt" in text
     assert "if errorlevel 1 goto :setup_failed" in text
-    assert ":setup_failed" in text
+    assert "\n:setup_failed\n" in text
     assert "exit /b 1" in text
 
     success = "echo  Setup complete!"
-    failure = ":setup_failed"
+    failure_label = "\n:setup_failed\n"
     assert success in text
-    assert failure in text
-    assert text.index(success) < text.index(failure)
+    assert text.index(success) < text.index(failure_label)
 
 
 def test_setup_bat_uses_reproducible_frontend_install_and_real_commands() -> None:
