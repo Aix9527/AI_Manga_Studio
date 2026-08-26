@@ -111,3 +111,10 @@ def test_verify_release_bat_defaults_to_safe_code_only_and_has_explicit_modes() 
     assert "call verify_h3.bat" in text
     assert "verify_release.bat full" in text
     assert "verify_release.bat preflight" in text
+
+
+def test_verify_release_bat_calls_npm_probe_and_does_not_exit_into_npm_cmd() -> None:
+    text = _read("verify_release.bat")
+
+    assert "call npm --version >nul 2>&1" in text
+    assert "\nnpm --version >nul 2>&1\n" not in text
