@@ -53,6 +53,8 @@ class H3UnifiedLiveGate:
 
         comfy_report: dict[str, Any]
         h3_report: dict[str, Any]
+        nodes_checked = False
+        provider = H3UnifiedProvider()
         try:
             object_info = await self.adapter.get_object_info()
             comfy_report = {
@@ -60,20 +62,35 @@ class H3UnifiedLiveGate:
                 "base_url": _adapter_base_url(self.adapter),
                 "node_count": len(object_info) if isinstance(object_info, dict) else 0,
             }
-            h3_report = H3UnifiedProvider().preflight(object_info)
+            h3_report = provider.preflight(object_info)
+            h3_report["check_status"] = "checked"
+            nodes_checked = True
         except Exception as error:
             comfy_report = {
                 "reachable": False,
                 "base_url": _adapter_base_url(self.adapter),
                 "error": str(error),
             }
-            h3_report = H3UnifiedProvider().preflight({})
+            h3_report = {
+                "provider": provider.provider_name,
+                "check_status": "unavailable",
+                "reason": "comfyui_unreachable",
+                "external_unified_available": None,
+                "latent_continuity_available": None,
+                "recommended_runtime": "unavailable",
+                "transparent_fallback_available": False,
+                "alternate_route": provider.alternate_route,
+                "alternate_route_requires_recompile": True,
+                "missing_nodes": [],
+                "missing_motion_context_nodes": [],
+            }
             failures.append("comfyui")
 
-        if not h3_report.get("external_unified_available"):
-            failures.append("h3_unified_node")
-        if not h3_report.get("latent_continuity_available"):
-            failures.append("motion_context_nodes")
+        if nodes_checked:
+            if not h3_report.get("external_unified_available"):
+                failures.append("h3_unified_node")
+            if not h3_report.get("latent_continuity_available"):
+                failures.append("motion_context_nodes")
 
         return {
             "schema": LIVE_GATE_SCHEMA,
