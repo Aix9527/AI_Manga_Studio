@@ -183,6 +183,8 @@ async def test_execution_rejects_external_submit_when_unified_node_is_missing(tm
     with pytest.raises(H3UnifiedUnavailableError) as captured:
         await service.execute(_request(tmp_path))
 
+    assert captured.value.alternate_route == "h3/reference"
     assert captured.value.fallback == "h3/reference"
+    assert captured.value.requires_recompile is True
     assert adapter.uploads == []
     assert adapter.submitted == []
