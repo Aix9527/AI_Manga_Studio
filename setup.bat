@@ -73,16 +73,28 @@ echo.
 echo ========================================
 echo  Setup complete!
 echo.
-echo  Usage:
+echo  Recommended verification:
+echo    verify_release.bat
+echo      Run v0.8 code release gates only; no GPU generation
+echo.
+echo    verify_release.bat preflight
+echo      Run code gates plus H3 hardware preflight; no generation
+echo.
+echo    verify_release.bat full
+echo      Run code gates plus real 5-second H3 smoke generation
+echo.
+echo  Runtime:
 echo    run.bat
 echo      Start local Web UI
 echo.
+echo  H3-only diagnostics:
 echo    verify_h3.bat preflight
 echo      Check GPU / FFmpeg / ComfyUI / H3 Unified nodes without generation
 echo.
 echo    verify_h3.bat
 echo      Run full H3 Unified verification including the 5-second smoke generation
 echo.
+echo  Legacy CLI:
 echo    python -m backend.cli diagnose
 echo      Check the local runtime environment
 echo.

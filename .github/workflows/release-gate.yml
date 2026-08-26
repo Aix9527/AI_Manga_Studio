@@ -1,0 +1,82 @@
+name: v0.8 Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v0.8*"
+
+permissions:
+  contents: read
+
+jobs:
+  launcher-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install pytest
+      - name: Launcher contracts
+        run: python -m pytest -q tests/test_local_launchers.py
+
+  h3-unified:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: H3 production wiring syntax
+        run: python -m py_compile backend/main.py backend/novel_video/h3_unified_runtime.py backend/video/h3_unified/formal_provider.py backend/video/h3_unified/live_gate.py tools/h3_unified_live_gate.py
+      - name: H3 Unified contracts
+        run: python -m pytest -q tests/video/test_h3_unified.py tests/video/test_h3_unified_router.py tests/video/test_h3_unified_execution.py tests/video/test_h3_unified_formal.py tests/video/test_h3_unified_factory.py tests/video/test_h3_unified_formal_assets.py tests/video/test_h3_unified_provider_media_binding.py tests/video/test_h3_unified_live_gate.py --disable-warnings --maxfail=1
+
+  unified-studio:
+    runs-on: ubuntu-latest
+    env:
+      AI_MANGA_NOVEL_VIDEO_CAPABILITY: ci-local-capability
+      AI_MANGA_NOVEL_PROXY_SECRET: ci-local-proxy-secret
+      AI_MANGA_BACKEND_URL: http://127.0.0.1:8000
+      AI_MANGA_VITE_PORT: "5173"
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit dependencies
+        run: npm audit
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+
+  release-ready:
+    needs:
+      - launcher-contract
+      - h3-unified
+      - unified-studio
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release gate passed
+        run: echo "AI Manga Studio v0.8 code release gate passed. Hardware Gate remains a separate target-machine acceptance."
