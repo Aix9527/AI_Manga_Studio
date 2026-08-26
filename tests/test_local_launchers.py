@@ -135,3 +135,16 @@ def test_verify_release_bat_supplies_frontend_runtime_contract_env() -> None:
     assert vite_port in text
     assert text.index(capability) < text.index(frontend)
     assert text.index(proxy_secret) < text.index(frontend)
+
+
+def test_h3_live_gate_direct_script_bootstraps_repo_root_before_backend_imports() -> None:
+    text = _read("tools/h3_unified_live_gate.py")
+
+    root = "REPO_ROOT = Path(__file__).resolve().parents[1]"
+    bootstrap = "sys.path.insert(0, str(REPO_ROOT))"
+    backend_import = "from backend.production.comfy_adapter import ComfyUIAdapter"
+
+    assert "import sys" in text
+    assert root in text
+    assert bootstrap in text
+    assert text.index(root) < text.index(bootstrap) < text.index(backend_import)
