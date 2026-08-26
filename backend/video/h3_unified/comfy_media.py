@@ -27,6 +27,13 @@ class H3ComfyMediaAdapter:
     """
 
     base: ComfyUIAdapter = field(default_factory=ComfyUIAdapter)
+    timeout_seconds: int = 900
+
+    def __post_init__(self) -> None:
+        # H3 Unified 在 16GB VRAM 目标机上会动态卸载 20GB 级模型,
+        # 单次 5s T2VA 实测约 9.4 分钟; 默认 300s 会在生成中途误报超时。
+        if self.timeout_seconds != getattr(self.base, "timeout_seconds", self.timeout_seconds):
+            self.base.timeout_seconds = self.timeout_seconds
 
     async def get_object_info(self) -> dict[str, Any]:
         return await self.base.get_object_info()

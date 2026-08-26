@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from backend.production.comfy_adapter import ComfyUIAdapter
+from backend.video.h3_unified.comfy_media import H3ComfyMediaAdapter
 from backend.video.h3_unified.reference_bundle import H3ReferenceBundle
 from backend.video.h3_unified.segmented import H3SegmentPolicy, build_segment_plan
 from backend.video.h3_unified.ui_state import H3Mode, H3UnifiedRequest, build_ui_state
@@ -83,7 +85,22 @@ def test_unified_state_matches_external_control_desk_contract_and_16gb_profile()
     json.dumps(state, ensure_ascii=False)
 
 
-def test_unified_request_defaults_to_valid_control_desk_camera_movement() -> None:
+def test_h3_media_adapter_defaults_to_extended_completion_timeout() -> None:
+    # 16GB VRAM 目标机动态卸载 20GB 级 H3 模型时, 单次 5s T2VA 实测约 9.4 分钟;
+    # H3 适配器必须放宽等待上限, 否则会在生成中途误报 COMFY_TIMEOUT。
+    adapter = H3ComfyMediaAdapter()
+    assert adapter.timeout_seconds == 900
+    assert adapter.base.timeout_seconds == 900
+
+
+def test_h3_media_adapter_keeps_custom_base_timeout_when_explicit() -> None:
+    base = ComfyUIAdapter(timeout_seconds=120)
+    adapter = H3ComfyMediaAdapter(base=base)
+    assert adapter.timeout_seconds == 900
+    assert base.timeout_seconds == 900
+
+
+def test_h3_unified_request_defaults_to_valid_control_desk_camera_movement() -> None:
     # 总控台 LtoJ_H3UnifiedControlDesk 的 CAMERA_MOVEMENT_CHOICES 首个合法值为
     # "自动/未指定"; "固定镜头" 不在枚举中, 会触发 "不支持的运镜" 执行错误。
     request = H3UnifiedRequest(mode=H3Mode.T2VA, prompt="test")
