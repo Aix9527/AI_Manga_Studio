@@ -18,63 +18,83 @@ if errorlevel 1 (
 echo [OK] Python found
 
 echo.
-echo [1/5] Upgrading pip...
+echo [1/4] Upgrading pip...
 python -m pip install --upgrade pip >nul 2>&1
-echo [OK] pip is up to date
-
-echo.
-echo [2/5] Installing Python dependencies...
-pip install -r requirements.txt
 if errorlevel 1 (
-    echo [WARN] Some dependencies failed to install
+    echo [WARN] pip upgrade failed; continuing with the installed pip version
 ) else (
-    echo [OK] Python dependencies installed
+    echo [OK] pip is up to date
 )
 
 echo.
-echo [3/5] Installing optional dependencies...
-pip install edge-tts Pillow >nul 2>&1
-echo [OK] Optional dependencies done
+echo [2/4] Installing Python dependencies...
+python -m pip install -r requirements.txt
+if errorlevel 1 goto :setup_failed
+echo [OK] Python dependencies installed
 
 echo.
-echo [4/5] Installing frontend dependencies...
-if exist "frontend\package.json" (
-    pushd frontend
-    call npm install --silent 2>nul
-    if errorlevel 1 (
-        echo [WARN] npm install failed. Is Node.js installed?
-    ) else (
-        echo [OK] Frontend dependencies installed
-    )
+echo [3/4] Installing frontend dependencies...
+if not exist "frontend\package.json" (
+    echo [ERROR] frontend\package.json not found
+    goto :setup_failed
+)
+pushd frontend
+npm --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js/npm not found. Install Node.js 20+
     popd
-) else (
-    echo [SKIP] No frontend directory found
+    goto :setup_failed
 )
+if exist "package-lock.json" (
+    call npm ci
+) else (
+    echo [WARN] package-lock.json not found; falling back to npm install
+    call npm install
+)
+if errorlevel 1 (
+    echo [ERROR] Frontend dependency installation failed
+    popd
+    goto :setup_failed
+)
+echo [OK] Frontend dependencies installed
 
 echo.
-echo [5/5] Building frontend...
-if exist "frontend\package.json" (
-    pushd frontend
-    call npm run build 2>nul
-    if errorlevel 1 (
-        echo [WARN] Build failed. Use "npm run dev" for dev mode.
-    ) else (
-        echo [OK] Frontend built
-    )
+echo [4/4] Building frontend...
+call npm run build
+if errorlevel 1 (
+    echo [ERROR] Frontend build failed
     popd
-) else (
-    echo [SKIP] No frontend directory found
+    goto :setup_failed
 )
+popd
+echo [OK] Frontend built
 
 echo.
 echo ========================================
 echo  Setup complete!
 echo.
 echo  Usage:
-echo    run.bat                        Start web UI
-echo    run.bat generate -i novel.txt  Generate video
-echo    run.bat diagnose               Check environment
+echo    run.bat
+echo      Start local Web UI
+echo.
+echo    python -m backend.cli diagnose
+echo      Check the local runtime environment
+echo.
+echo    python -m backend.cli generate -i novel.txt -o output.mp4
+echo      Run the legacy CLI generation path
+echo.
+echo    python tools\h3_unified_live_gate.py
+echo      Preflight RTX / ComfyUI / H3 Unified without submitting generation
 echo ========================================
 
 pause
 exit /b 0
+
+:setup_failed
+echo.
+echo ========================================
+echo  [ERROR] Setup failed.
+echo  Fix the error above, then run setup.bat again.
+echo ========================================
+pause
+exit /b 1
