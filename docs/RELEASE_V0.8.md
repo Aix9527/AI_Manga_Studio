@@ -148,12 +148,12 @@ python tools\h3_unified_live_gate.py --submit --resume-prompt-id <prompt_id>
 
 只有以下全部成立，才能将 v0.8 标记为目标机器正式验收完成：
 
-- [ ] Gate 0 安装 PASS
-- [ ] Gate 1 代码 Release Gate PASS
-- [ ] Gate 2 H3 target-machine preflight PASS
-- [ ] Gate 3 H3 real smoke PASS
-- [ ] evidence JSON 已保留
-- [ ] GPU / VRAM / ComfyUI nodes / prompt_id / output media 已记录
+- [x] Gate 0 安装 PASS
+- [x] Gate 1 代码 Release Gate PASS
+- [x] Gate 2 H3 target-machine preflight PASS
+- [x] Gate 3 H3 real smoke PASS
+- [x] evidence JSON 已保留
+- [x] GPU / VRAM / ComfyUI nodes / prompt_id / output media 已记录
 
 ### 当前仓库侧已完成
 
@@ -168,10 +168,14 @@ python tools\h3_unified_live_gate.py --submit --resume-prompt-id <prompt_id>
 - [x] `verify_release.bat`
 - [x] 手动 `v0.8 Release Gate` GitHub workflow
 
-### 仍需目标机器证据
+### 目标机器证据（2026-08-27 本机验收）
 
-- [ ] RTX / VRAM preflight
-- [ ] ComfyUI Unified + Motion Context node catalogue
-- [ ] 5 秒真实 H3 smoke generation
+- [x] RTX 5070 Ti / VRAM 16303 MB（≥ 16GB 档阈值）
+- [x] ComfyUI `127.0.0.1:8188` reachable，node_count=3298
+- [x] `LtoJ_H3UnifiedControlDesk` + 4 个 Motion Context 节点齐全
+- [x] `recommended_runtime == "external_unified"`，`preflight.ok == true`
+- [x] 5 秒真实 H3 T2VA smoke：`state=completed`，`runtime=external_unified`
+- [x] smoke 输出 `MangaStudio/H3_Unified_Live_Gate/E001_S001_SH0001_T01_5.0s_12step_00003_.mp4`（H.264 480×864 / 9:16 / 5.000s，prompt_id `47ab686d-4520-4c2a-bd8d-fc533c53240f`）
+- [x] evidence 文件：`storage/live/h3_unified_live_gate.json`
 
 硬件 Gate 完成后，再创建/发布 `v0.8.0` 正式 release；不要仅凭代码 review 或云端 CI 宣称硬件验收通过。
