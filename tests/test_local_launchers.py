@@ -52,3 +52,28 @@ def test_setup_bat_uses_reproducible_frontend_install_and_real_commands() -> Non
     assert "python tools\\h3_unified_live_gate.py" in text
     assert "run.bat diagnose" not in text
     assert "run.bat generate" not in text
+
+
+def test_verify_h3_bat_runs_preflight_before_smoke_and_fails_closed() -> None:
+    text = _read("verify_h3.bat")
+
+    preflight = "python tools\\h3_unified_live_gate.py"
+    smoke = (
+        "python tools\\h3_unified_live_gate.py --submit --mode T2VA "
+        "--duration 5 --resolution 480p --aspect-ratio 9:16 --steps 12"
+    )
+
+    assert preflight in text
+    assert smoke in text
+    assert text.index(preflight) < text.index(smoke)
+    assert "if errorlevel 1 goto :verify_failed" in text
+    assert "exit /b 1" in text
+    assert "storage\\live\\h3_unified_live_gate.json" in text
+
+
+def test_verify_h3_bat_supports_preflight_only_mode() -> None:
+    text = _read("verify_h3.bat")
+
+    assert 'if /I "%~1"=="preflight" goto :verify_passed' in text
+    assert "verify_h3.bat preflight" in text
+    assert "verify_h3.bat" in text
