@@ -5,8 +5,8 @@ title AI Manga Studio - v0.8 Release Gate
 
 set "MODE=%~1"
 
-if /I "%MODE%"=="help" goto :usage
-if not "%MODE%"=="" if /I not "%MODE%"=="preflight" if /I not "%MODE%"=="full" goto :usage_failed
+if /I "%~1"=="help" goto :usage
+if not "%~1"=="" if /I not "%~1"=="preflight" if /I not "%~1"=="full" goto :usage_failed
 
 echo ========================================
 echo  AI Manga Studio v0.8 - Release Gate
@@ -62,9 +62,9 @@ popd
 echo [OK] Unified Studio frontend passed.
 echo.
 
-if "%MODE%"=="" goto :release_passed
-if /I "%MODE%"=="preflight" goto :hardware_preflight
-if /I "%MODE%"=="full" goto :hardware_full
+if "%~1"=="" goto :release_passed
+if /I "%~1"=="preflight" goto :hardware_preflight
+if /I "%~1"=="full" goto :hardware_full
 goto :usage_failed
 
 :hardware_preflight
@@ -85,9 +85,9 @@ echo ========================================
 echo  v0.8 Release Gate PASSED
 echo ========================================
 echo.
-if "%MODE%"=="" echo  Scope: code gates only; no GPU generation was submitted.
-if /I "%MODE%"=="preflight" echo  Scope: code gates + H3 hardware preflight; no generation submitted.
-if /I "%MODE%"=="full" echo  Scope: code gates + H3 hardware preflight + 5-second smoke generation.
+if "%~1"=="" echo  Scope: code gates only; no GPU generation was submitted.
+if /I "%~1"=="preflight" echo  Scope: code gates + H3 hardware preflight; no generation submitted.
+if /I "%~1"=="full" echo  Scope: code gates + H3 hardware preflight + 5-second smoke generation.
 echo.
 echo  Code only:       verify_release.bat
 echo  + H3 preflight:  verify_release.bat preflight
@@ -98,13 +98,13 @@ exit /b 0
 echo.
 echo  Usage:
 echo    verify_release.bat
- echo      Run code release gates only. Safe default; no GPU generation.
+echo      Run code release gates only. Safe default; no GPU generation.
 echo.
 echo    verify_release.bat preflight
- echo      Run code gates, then H3 hardware preflight only.
+echo      Run code gates, then H3 hardware preflight only.
 echo.
 echo    verify_release.bat full
- echo      Run code gates, then H3 preflight and the 5-second real smoke generation.
+echo      Run code gates, then H3 preflight and the 5-second real smoke generation.
 exit /b 0
 
 :usage_failed
