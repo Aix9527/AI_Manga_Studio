@@ -83,6 +83,14 @@ def test_unified_state_matches_external_control_desk_contract_and_16gb_profile()
     json.dumps(state, ensure_ascii=False)
 
 
+def test_unified_request_defaults_to_valid_control_desk_camera_movement() -> None:
+    # 总控台 LtoJ_H3UnifiedControlDesk 的 CAMERA_MOVEMENT_CHOICES 首个合法值为
+    # "自动/未指定"; "固定镜头" 不在枚举中, 会触发 "不支持的运镜" 执行错误。
+    request = H3UnifiedRequest(mode=H3Mode.T2VA, prompt="test")
+    state = build_ui_state(request)
+    assert state["director"]["camera"]["movement"] == "自动/未指定"
+
+
 def test_unified_request_rejects_invalid_duration_and_step_count() -> None:
     with pytest.raises(ValueError, match="2.*15"):
         H3UnifiedRequest(mode=H3Mode.T2VA, prompt="test", duration_seconds=16)

@@ -78,7 +78,7 @@ class H3UnifiedRequest:
     reference_quality: str = "match"
     input_style: str = "natural"
     shot_size: str = "中景"
-    camera_movement: str = "固定镜头"
+    camera_movement: str = "自动/未指定"
     camera_speed: str = "正常"
     motion_strength: str = "自然"
     environment_sound: str = ""
