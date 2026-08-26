@@ -148,3 +148,31 @@ def test_h3_live_gate_direct_script_bootstraps_repo_root_before_backend_imports(
     assert root in text
     assert bootstrap in text
     assert text.index(root) < text.index(bootstrap) < text.index(backend_import)
+
+
+def test_h3_live_gate_smoke_uses_fresh_random_seed_per_run() -> None:
+    # 固定 seed 会让两次 smoke 提交完全相同的 workflow, ComfyUI 走节点缓存
+    # (execution_cached) 直接返回空 outputs, 导致 Gate B 误报 COMFY_NO_OUTPUT。
+    # 默认必须每次随机, 显式 --seed 才允许固定复现。
+    text = _read("tools/h3_unified_live_gate.py")
+
+    assert 'parser.add_argument("--seed", type=int, default=None' in text
+    assert "random.randint(0, 2**31 - 1)" in text
+
+    import random as _random
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(ROOT))
+    from tools import h3_unified_live_gate as gate
+
+    parser = gate.build_parser()
+    args_a = parser.parse_args([])
+    args_b = parser.parse_args([])
+    seed_a = gate.build_request(args_a).seed
+    seed_b = gate.build_request(args_b).seed
+    assert seed_a != seed_b
+
+    _random.seed(7)
+    fixed = parser.parse_args(["--seed", "42"])
+    assert gate.build_request(fixed).seed == 42

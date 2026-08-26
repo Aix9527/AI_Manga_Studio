@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -33,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resolution", choices=("360p", "480p", "720p", "1080p"), default="480p")
     parser.add_argument("--aspect-ratio", choices=("16:9", "9:16", "1:1"), default="9:16")
     parser.add_argument("--steps", type=int, choices=(8, 10, 12, 15, 20), default=12)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=None, help="Fixed seed; defaults to a fresh random seed per run so repeated smoke runs are never served from ComfyUI's node cache")
     parser.add_argument("--gpu-vram-gb", type=float, default=16.0)
     parser.add_argument("--character", default="")
     parser.add_argument("--secondary-character", default="")
@@ -76,7 +77,7 @@ def build_request(args: argparse.Namespace) -> H3UnifiedRequest:
         resolution=args.resolution,
         aspect_ratio=args.aspect_ratio,
         steps=args.steps,
-        seed=args.seed,
+        seed=args.seed if args.seed is not None else random.randint(0, 2**31 - 1),
         gpu_vram_gb=args.gpu_vram_gb,
         shot_project="H3 Unified Live Gate",
     )
