@@ -42,6 +42,10 @@ if not exist "frontend\package.json" (
     echo [ERROR] frontend\package.json not found.
     goto :release_failed
 )
+set "AI_MANGA_NOVEL_VIDEO_CAPABILITY=release-gate-local-capability"
+set "AI_MANGA_NOVEL_PROXY_SECRET=release-gate-local-proxy-secret"
+set "AI_MANGA_BACKEND_URL=http://127.0.0.1:8000"
+set "AI_MANGA_VITE_PORT=5173"
 pushd frontend
 call npm run typecheck
 if errorlevel 1 (

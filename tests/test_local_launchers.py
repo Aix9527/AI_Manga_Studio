@@ -118,3 +118,20 @@ def test_verify_release_bat_calls_npm_probe_and_does_not_exit_into_npm_cmd() -> 
 
     assert "call npm --version >nul 2>&1" in text
     assert "\nnpm --version >nul 2>&1\n" not in text
+
+
+def test_verify_release_bat_supplies_frontend_runtime_contract_env() -> None:
+    text = _read("verify_release.bat")
+
+    capability = 'set "AI_MANGA_NOVEL_VIDEO_CAPABILITY=release-gate-local-capability"'
+    proxy_secret = 'set "AI_MANGA_NOVEL_PROXY_SECRET=release-gate-local-proxy-secret"'
+    backend_url = 'set "AI_MANGA_BACKEND_URL=http://127.0.0.1:8000"'
+    vite_port = 'set "AI_MANGA_VITE_PORT=5173"'
+    frontend = "call npm run typecheck"
+
+    assert capability in text
+    assert proxy_secret in text
+    assert backend_url in text
+    assert vite_port in text
+    assert text.index(capability) < text.index(frontend)
+    assert text.index(proxy_secret) < text.index(frontend)
