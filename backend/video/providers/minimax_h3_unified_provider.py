@@ -16,16 +16,17 @@ MOTION_CONTEXT_NODES = (
 
 
 class H3UnifiedProvider:
-    """Optional adapter for an externally installed H3 unified control node.
+    """Adapter for the externally installed H3 unified control node.
 
-    This provider does not vendor or import the third-party custom-node package.
-    It only builds the interoperable single-node prompt when the node is present
-    in ComfyUI's ``/object_info`` catalogue.  Existing native H3 remains the
-    fallback when that external capability is unavailable.
+    The external control desk accepts the full Unified request contract
+    (T2VA/FL2VA/Ref2VA plus optional image/video/audio references).  Existing
+    native H3 routes such as ``h3/reference`` remain separate product routes;
+    they are not transparent fallbacks because their accepted inputs differ.
+    A caller may offer them only after recompiling the request for that route.
     """
 
     provider_name = "h3_unified"
-    fallback_provider = "h3/reference"
+    alternate_route = "h3/reference"
 
     def preflight(self, object_info: Mapping[str, Any] | None) -> dict[str, Any]:
         available = set((object_info or {}).keys())
@@ -37,8 +38,10 @@ class H3UnifiedProvider:
             "provider": self.provider_name,
             "external_unified_available": external_available,
             "latent_continuity_available": not missing_motion,
-            "recommended_runtime": "external_unified" if external_available else "native_h3",
-            "fallback": self.fallback_provider,
+            "recommended_runtime": "external_unified" if external_available else "unavailable",
+            "transparent_fallback_available": False,
+            "alternate_route": self.alternate_route,
+            "alternate_route_requires_recompile": True,
             "missing_nodes": missing_nodes,
             "missing_motion_context_nodes": missing_motion,
         }
