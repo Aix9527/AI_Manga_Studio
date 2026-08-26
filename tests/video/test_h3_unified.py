@@ -146,14 +146,18 @@ def test_provider_preflight_detects_external_unified_and_v6_motion_context_nodes
     assert status["external_unified_available"] is True
     assert status["latent_continuity_available"] is True
     assert status["recommended_runtime"] == "external_unified"
+    assert status["transparent_fallback_available"] is False
     assert status["missing_motion_context_nodes"] == []
 
 
-def test_provider_preflight_falls_back_to_native_h3_when_external_node_is_missing() -> None:
+def test_provider_preflight_marks_unified_unavailable_instead_of_claiming_native_fallback() -> None:
     status = H3UnifiedProvider().preflight({"MiniMaxH3ReferenceToVideo": {}})
 
     assert status["external_unified_available"] is False
-    assert status["recommended_runtime"] == "native_h3"
+    assert status["recommended_runtime"] == "unavailable"
+    assert status["transparent_fallback_available"] is False
+    assert status["alternate_route"] == "h3/reference"
+    assert status["alternate_route_requires_recompile"] is True
     assert "LtoJ_H3UnifiedControlDesk" in status["missing_nodes"]
 
 

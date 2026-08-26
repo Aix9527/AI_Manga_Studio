@@ -10,8 +10,12 @@ from backend.video.providers.minimax_h3_unified_provider import H3UnifiedProvide
 
 
 class H3UnifiedUnavailableError(RuntimeError):
-    def __init__(self, message: str, *, fallback: str) -> None:
-        self.fallback = fallback
+    def __init__(self, message: str, *, alternate_route: str) -> None:
+        self.alternate_route = alternate_route
+        # Backward-compatible informational alias.  This does NOT mean the
+        # current Unified request may be submitted to that route unchanged.
+        self.fallback = alternate_route
+        self.requires_recompile = True
         super().__init__(message)
 
 
@@ -41,6 +45,11 @@ class H3UnifiedExecutionService:
         If ``resume_prompt_id`` is supplied, no media is uploaded and no new
         prompt is submitted. The exact accepted ComfyUI prompt is reconciled
         through history instead, preserving the durable crash-recovery rule.
+
+        Traditional H3 reference/FL2V routes are deliberately not transparent
+        fallbacks: their input contracts differ from a Unified request.  If the
+        external control desk is missing we fail before upload/submission and
+        report the alternate route that an upper layer may recompile for.
         """
 
         if resume_prompt_id:
@@ -56,8 +65,8 @@ class H3UnifiedExecutionService:
         preflight = self.provider.preflight(object_info)
         if not preflight["external_unified_available"]:
             raise H3UnifiedUnavailableError(
-                "External H3 unified control node is unavailable",
-                fallback=str(preflight["fallback"]),
+                "External H3 unified control node is unavailable; alternate H3 routes require request recompilation",
+                alternate_route=str(preflight["alternate_route"]),
             )
 
         staged = await stage_h3_unified_request(

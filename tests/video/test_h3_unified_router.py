@@ -20,7 +20,9 @@ def test_router_selects_unified_h3_only_when_explicitly_requested() -> None:
     assert selected["provider"] == "h3"
     assert selected["model"] == "minimax_h3_unified"
     assert selected["workflow"] == "unified"
-    assert selected["fallback"] == "h3/reference"
+    assert selected["fallback"] is None
+    assert selected["alternate_route"] == "h3/reference"
+    assert selected["alternate_route_requires_recompile"] is True
 
 
 def test_router_preserves_existing_reference_route_without_unified_opt_in() -> None:
@@ -92,3 +94,18 @@ async def test_runtime_preflight_reads_live_comfy_node_catalogue(monkeypatch) ->
     assert status["external_unified_available"] is True
     assert status["latent_continuity_available"] is True
     assert status["recommended_runtime"] == "external_unified"
+
+
+@pytest.mark.asyncio
+async def test_runtime_preflight_does_not_claim_native_unified_when_control_node_is_missing(monkeypatch) -> None:
+    async def fake_object_info(self):
+        return {"MiniMaxH3ReferenceToVideo": {}}
+
+    monkeypatch.setattr(runtime_api.ComfyUIAdapter, "get_object_info", fake_object_info)
+
+    status = await h3_unified_preflight()
+
+    assert status["external_unified_available"] is False
+    assert status["recommended_runtime"] == "unavailable"
+    assert status["alternate_route"] == "h3/reference"
+    assert status["alternate_route_requires_recompile"] is True
