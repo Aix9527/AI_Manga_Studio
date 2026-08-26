@@ -6,6 +6,7 @@ on:
       - "run.py"
       - "run.bat"
       - "setup.bat"
+      - "verify_h3.bat"
       - "tests/test_local_launchers.py"
       - ".github/workflows/local-launcher-ci.yml"
   push:
@@ -15,6 +16,7 @@ on:
       - "run.py"
       - "run.bat"
       - "setup.bat"
+      - "verify_h3.bat"
       - "tests/test_local_launchers.py"
       - ".github/workflows/local-launcher-ci.yml"
 

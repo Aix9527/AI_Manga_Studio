@@ -77,14 +77,17 @@ echo  Usage:
 echo    run.bat
 echo      Start local Web UI
 echo.
+echo    verify_h3.bat preflight
+echo      Check GPU / FFmpeg / ComfyUI / H3 Unified nodes without generation
+echo.
+echo    verify_h3.bat
+echo      Run full H3 Unified verification including the 5-second smoke generation
+echo.
 echo    python -m backend.cli diagnose
 echo      Check the local runtime environment
 echo.
 echo    python -m backend.cli generate -i novel.txt -o output.mp4
 echo      Run the legacy CLI generation path
-echo.
-echo    python tools\h3_unified_live_gate.py
-echo      Preflight RTX / ComfyUI / H3 Unified without submitting generation
 echo ========================================
 
 pause
