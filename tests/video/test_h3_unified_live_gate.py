@@ -21,6 +21,11 @@ class MissingUnifiedAdapter:
         return {name: {} for name in MOTION_CONTEXT_NODES}
 
 
+class UnreachableAdapter:
+    async def get_object_info(self):
+        raise ConnectionError("ComfyUI refused connection")
+
+
 class FakeExecution:
     def __init__(self) -> None:
         self.calls = []
@@ -90,6 +95,28 @@ async def test_live_gate_fails_closed_when_unified_control_node_is_missing() -> 
     assert report["h3_unified"]["recommended_runtime"] == "unavailable"
     assert report["h3_unified"]["transparent_fallback_available"] is False
     assert report["h3_unified"]["alternate_route_requires_recompile"] is True
+
+
+@pytest.mark.asyncio
+async def test_live_gate_marks_node_checks_unavailable_when_comfyui_is_unreachable() -> None:
+    gate = H3UnifiedLiveGate(
+        adapter=UnreachableAdapter(),
+        execution=FakeExecution(),
+        command_runner=fake_command,
+        which=fake_which,
+    )
+
+    report = await gate.preflight()
+
+    assert report["ok"] is False
+    assert report["failures"] == ["comfyui"]
+    assert report["comfyui"]["reachable"] is False
+    assert report["h3_unified"]["check_status"] == "unavailable"
+    assert report["h3_unified"]["reason"] == "comfyui_unreachable"
+    assert report["h3_unified"]["external_unified_available"] is None
+    assert report["h3_unified"]["latent_continuity_available"] is None
+    assert report["h3_unified"]["missing_nodes"] == []
+    assert report["h3_unified"]["missing_motion_context_nodes"] == []
 
 
 @pytest.mark.asyncio
