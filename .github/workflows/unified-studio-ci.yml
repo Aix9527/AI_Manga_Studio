@@ -7,7 +7,7 @@ on:
       - ".github/workflows/unified-studio-ci.yml"
   push:
     branches:
-      - "feat/unified-local-studio"
+      - "master"
     paths:
       - "frontend/**"
       - ".github/workflows/unified-studio-ci.yml"
