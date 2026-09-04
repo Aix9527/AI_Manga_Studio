@@ -125,4 +125,20 @@ describe("TimelineQcWorkspace v0.9 export gate", () => {
     expect(screen.getByText(/存在未通过 QC 的资产/)).toBeInTheDocument();
     expect(actions.retryJob).not.toHaveBeenCalled();
   });
+
+  it("fails closed while any asset still has pending QC", async () => {
+    vi.mocked(workspaceApi.listAssets).mockResolvedValue([
+      passedVideo,
+      { ...passedVideo, id: 2, shot_id: "shot-02", quality_status: "unreviewed" },
+    ]);
+    state.jobs = new Map([["job-export", job("retry_wait")]]);
+    state.recentIds = ["job-export"];
+
+    render(<TimelineQcWorkspace />);
+    await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
+
+    expect(screen.getByRole("button", { name: "恢复导出" })).toBeDisabled();
+    expect(screen.getByText(/仍有未完成 QC 的资产/)).toBeInTheDocument();
+    expect(actions.retryJob).not.toHaveBeenCalled();
+  });
 });
