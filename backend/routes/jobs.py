@@ -65,7 +65,10 @@ async def pause_job(job_id: str, request: Request) -> JobDetail:
 
 @router.post("/{job_id}/resume", response_model=JobDetail)
 async def resume_job(job_id: str, request: Request) -> JobDetail:
-    return get_service(request).resume(job_id)
+    try:
+        return get_service(request).resume(job_id)
+    except StageExecutionConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.post("/{job_id}/retry", response_model=JobDetail)
