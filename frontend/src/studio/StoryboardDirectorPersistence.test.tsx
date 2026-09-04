@@ -114,7 +114,7 @@ describe("StoryboardDirectorWorkspace v0.9 director persistence", () => {
     await user.click(screen.getByRole("button", { name: "跟拍" }));
     await user.clear(screen.getByLabelText("执行提示词"));
     await user.type(screen.getByLabelText("执行提示词"), "新导演参数");
-    await user.click(screen.getByRole("button", { name: "保存导演参数" }));
+    await user.click(screen.getByRole("button", { name: /保存导演参数/ }));
 
     expect(workspaceApi.updateDirectorSettings).toHaveBeenCalledWith(
       "project-a",
