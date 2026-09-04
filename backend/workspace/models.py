@@ -37,6 +37,14 @@ class DirectorSettings(BaseModel):
     prompt: str = ""
 
 
+class ProductionTemplateSaveRequest(BaseModel):
+    name: str = ""
+    schema_version: int = 1
+    canvas: dict[str, object] = Field(default_factory=dict)
+    production: dict[str, object] = Field(default_factory=dict)
+    stage_policy: dict[str, object] = Field(default_factory=dict)
+
+
 class ProductionTemplateVersion(BaseModel):
     id: str
     project_id: str
@@ -57,6 +65,12 @@ class ProductionTemplateList(BaseModel):
     latest_version: int = 0
     published_version: int | None = None
     versions: list[ProductionTemplateVersion] = Field(default_factory=list)
+
+
+class PublishedProductionTemplate(BaseModel):
+    project_id: str
+    published: bool
+    template: ProductionTemplateVersion | None = None
 
 
 class StageSummary(BaseModel):
