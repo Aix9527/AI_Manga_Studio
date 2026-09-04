@@ -124,6 +124,31 @@ class OrchestrationDatabase:
         CREATE INDEX IF NOT EXISTS idx_job_steps_job_id ON job_steps(job_id);
         CREATE INDEX IF NOT EXISTS idx_job_steps_status ON job_steps(status);
 
+        CREATE TRIGGER IF NOT EXISTS trg_pause_after_canvas_rerun
+        AFTER UPDATE OF status ON job_steps
+        WHEN NEW.status='completed'
+          AND OLD.status <> 'completed'
+          AND EXISTS (
+              SELECT 1 FROM jobs
+              WHERE id=NEW.job_id
+                AND status='running'
+                AND desired_state=('pause_after_step:' || NEW.id)
+          )
+        BEGIN
+            UPDATE jobs
+               SET status='paused',
+                   desired_state=('rerun_node_complete:' || NEW.id),
+                   current_stage=NEW.stage_key,
+                   current_shot=NEW.shot_id,
+                   message=('Single-node rerun completed at ' || NEW.stage_key || '; choose a stage execution command to continue.'),
+                   lease_id=NULL,
+                   lease_expires_at=NULL,
+                   updated_at=datetime('now')
+             WHERE id=NEW.job_id
+               AND status='running'
+               AND desired_state=('pause_after_step:' || NEW.id);
+        END;
+
         CREATE TABLE IF NOT EXISTS artifacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
