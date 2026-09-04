@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdvancedCanvasWorkspace from "@/studio/AdvancedCanvasWorkspace";
 import type { JobDetail } from "@/types/jobs";
 
-const { workspaceStore, jobState, executeFromStage } = vi.hoisted(() => {
+const { workspaceStore, jobState, executeFromStage, listProductionTemplates } = vi.hoisted(() => {
   const workspace = {
     projectId: "project-a",
     snapshot: { project_id: "project-a" },
@@ -17,6 +17,7 @@ const { workspaceStore, jobState, executeFromStage } = vi.hoisted(() => {
     ),
     jobState: { jobs: new Map<string, JobDetail>(), recentIds: [] as string[] },
     executeFromStage: vi.fn(),
+    listProductionTemplates: vi.fn(),
   };
 });
 
@@ -30,6 +31,12 @@ vi.mock("@/state/workspaceStore", () => ({ useWorkspaceStore: workspaceStore }))
 vi.mock("@/state/jobStore", () => ({
   useJobStore: () => ({ jobs: jobState.jobs, recentIds: jobState.recentIds }),
   jobStoreActions: () => ({ executeFromStage }),
+}));
+vi.mock("@/api/productionTemplates", () => ({
+  listProductionTemplates,
+  getProductionTemplate: vi.fn(),
+  saveProductionTemplate: vi.fn(),
+  publishProductionTemplate: vi.fn(),
 }));
 
 function job(status: JobDetail["status"] = "paused"): JobDetail {
@@ -73,6 +80,12 @@ describe("AdvancedCanvasWorkspace v0.9 formal execution contract", () => {
     jobState.jobs = new Map([[current.id, current]]);
     jobState.recentIds = [current.id];
     executeFromStage.mockResolvedValue({ ...current, status: "queued" });
+    listProductionTemplates.mockResolvedValue({
+      project_id: "project-a",
+      latest_version: 0,
+      published_version: null,
+      versions: [],
+    });
   });
 
   afterEach(cleanup);
@@ -114,12 +127,11 @@ describe("AdvancedCanvasWorkspace v0.9 formal execution contract", () => {
     expect(executeFromStage).not.toHaveBeenCalled();
   });
 
-  it("does not claim a professional template was published without persistence", () => {
+  it("does not publish until an immutable template version exists", async () => {
     render(<AdvancedCanvasWorkspace />);
 
-    fireEvent.click(screen.getByRole("button", { name: "发布到一键成片" }));
-
-    expect(screen.queryByText("当前流程已设为一键成片专业模板")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/模板发布尚未接入持久化契约/);
+    await waitFor(() => expect(listProductionTemplates).toHaveBeenCalledWith("project-a"));
+    expect(screen.getByRole("button", { name: "发布到一键成片" })).toBeDisabled();
+    expect(screen.getByText(/最新保存：未保存/)).toBeInTheDocument();
   });
 });
