@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.orchestration.enums import JobStatus, JobCommand
 
@@ -23,6 +23,8 @@ class JobOptions(BaseModel):
     bgm_dir: str = "assets/bgm"
     sfx_dir: str = "assets/sfx"
     forbid_fallback_artifacts: bool = True
+    template_context: dict[str, Any] = Field(default_factory=dict, exclude=True)
+    stage_policy_context: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
 
 
 class JobSettings(BaseModel):
@@ -33,6 +35,14 @@ class JobSettings(BaseModel):
     options: JobOptions = Field(default_factory=JobOptions)
     stage_policy: list[dict[str, Any]] = Field(default_factory=list)
     template: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def promote_runtime_context(self) -> "JobSettings":
+        if self.options.template_context:
+            self.template = dict(self.options.template_context)
+        if self.options.stage_policy_context:
+            self.stage_policy = [dict(item) for item in self.options.stage_policy_context]
+        return self
 
 
 class JobCreate(BaseModel):
