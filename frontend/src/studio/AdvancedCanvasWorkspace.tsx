@@ -38,6 +38,13 @@ const AdvancedCanvasWorkspace: React.FC = () => {
     setSelectedNode(node);
   }, []);
 
+  const explainDelegatedExecution = () => {
+    setNotice(
+      `高级画布暂不直接提交单节点任务：${selectedNode?.data.label || "未选择节点"}。`
+      + " 当前版本没有可验证的 stage-start / resume-from-node 后端契约，请在项目台或时间线任务队列启动、恢复或重试正式 Production Job。",
+    );
+  };
+
   return (
     <div className="studio-workspace canvas-workspace">
       <aside className="studio-panel canvas-library">
@@ -54,10 +61,10 @@ const AdvancedCanvasWorkspace: React.FC = () => {
         <header className="studio-workspace__header">
           <div><h1>高级画布 / 精修工作台</h1><p>{notice}</p></div>
           <div className="asset-tabs">
-            <button type="button" className="studio-primary-button" onClick={() => setNotice(`运行选中节点：${selectedNode?.data.label || "未选择"}`)}>运行选中节点</button>
-            <button type="button" className="studio-secondary-button" onClick={() => setNotice(`从 ${selectedNode?.data.label || "当前节点"} 继续执行`)}>从当前节点继续</button>
-            <button type="button" className="studio-secondary-button" onClick={() => setNotice("当前流程已保存为本地模板")}>保存为模板</button>
-            <button type="button" className="studio-secondary-button" onClick={() => setNotice("当前流程已设为一键成片专业模板")}>发布到一键成片</button>
+            <button type="button" className="studio-primary-button" onClick={explainDelegatedExecution}>运行选中节点</button>
+            <button type="button" className="studio-secondary-button" onClick={explainDelegatedExecution}>从当前节点继续</button>
+            <button type="button" className="studio-secondary-button" onClick={() => setNotice("模板持久化尚未接入正式后端契约；当前流程未保存。")}>保存为模板</button>
+            <button type="button" className="studio-secondary-button" onClick={() => setNotice("模板发布尚未接入持久化契约；当前流程没有发布到一键成片。")}>发布到一键成片</button>
           </div>
         </header>
         <div className="canvas-stage" aria-label="高级生产节点画布">
@@ -76,7 +83,7 @@ const AdvancedCanvasWorkspace: React.FC = () => {
         </div>
         <section className="studio-panel">
           <div className="studio-panel__header"><div><strong>执行说明</strong><span>高级模式不会改变普通用户的一键生产入口</span></div></div>
-          <div className="inspector-section"><p className="subtle">默认流程：小说文本 → 场景拆解 → 角色Bible → 分镜脚本 → 关键帧 → TI2V视频生成 → 配音/字幕 → 合成导出。节点级执行按钮当前只改变精修工作台状态；实际 Provider 执行继续由现有本地编排与 ComfyUI 工作流负责。</p></div>
+          <div className="inspector-section"><p className="subtle">默认流程：小说文本 → 场景拆解 → 角色Bible → 分镜脚本 → 关键帧 → TI2V视频生成 → 配音/字幕 → 合成导出。节点画布当前用于专业配置、检查和流程设计；正式执行仍由项目台/时间线中的本地编排 Job 与 ComfyUI Provider 负责，避免界面宣称执行成功但后台没有任务。</p></div>
         </section>
       </section>
 
