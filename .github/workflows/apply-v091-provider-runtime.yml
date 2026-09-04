@@ -1,0 +1,99 @@
+name: Apply v0.9.1 provider runtime patch
+
+on:
+  push:
+    branches:
+      - "feat/v0.9.1-template-persistence"
+    paths:
+      - ".github/workflows/apply-v091-provider-runtime.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-worker:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v0.9.1-template-persistence
+      - name: Apply narrow worker provider-policy patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/orchestration/worker.py")
+          text = path.read_text(encoding="utf-8")
+
+          def replace_once(old: str, new: str, label: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "from backend.orchestration.repository import JobRepository\nfrom backend.workspace.models import StageAutomation, StageKey\n",
+              "from backend.orchestration.repository import JobRepository\nfrom backend.orchestration.template_provider_policy import (\n    resolve_video_provider_plan,\n    stage_provider_is_required,\n)\nfrom backend.workspace.models import StageAutomation, StageKey\n",
+              "provider policy import",
+          )
+
+          replace_once(
+              """        shot_id = step.get(\"shot_id\", \"\")\n        stage_key = step[\"stage_key\"]\n        step_id = step[\"id\"]\n\n        # Skip if shot doesn't exist in plan\n        if project_id and not self._shot_exists_in_plan(shot_id, project_id):\n""",
+              """        shot_id = step.get(\"shot_id\", \"\")\n        stage_key = step[\"stage_key\"]\n        step_id = step[\"id\"]\n        strict_flux = stage_provider_is_required(settings, stage_key, \"flux\")\n\n        # Skip if shot doesn't exist in plan\n        if project_id and not self._shot_exists_in_plan(shot_id, project_id):\n""",
+              "visual strict flag",
+          )
+
+          replace_once(
+              """        comfy = await self._get_comfy()\n        if not await comfy.is_available():\n            self.repo.set_job_progress(\n                job_id, stage_key, shot_id, 0.35,\n                f\"ComfyUI not available at {self.comfy_url}, skipping {shot_id}\",\n            )\n            _create_placeholder_image(output_path)\n            self._register_artifact(job_id, step_id, \"image\", str(output_path), shot_id)\n            return\n""",
+              """        comfy = await self._get_comfy()\n        if not await comfy.is_available():\n            message = f\"ComfyUI not available at {self.comfy_url} for {shot_id}\"\n            self.repo.set_job_progress(job_id, stage_key, shot_id, 0.35, message)\n            if strict_flux:\n                raise RuntimeError(message)\n            _create_placeholder_image(output_path)\n            self._register_artifact(job_id, step_id, \"image\", str(output_path), shot_id)\n            return\n""",
+              "visual unavailable behavior",
+          )
+
+          replace_once(
+              """        except Exception as e:\n            self.repo.set_job_progress(\n                job_id, stage_key, shot_id, 0.35,\n                f\"Image generation failed for {shot_id}: {e}\",\n            )\n            _create_placeholder_image(output_path)\n            self._register_artifact(job_id, step_id, \"image\", str(output_path), shot_id)\n\n    async def _run_standard_image_gen(\n""",
+              """        except Exception as e:\n            self.repo.set_job_progress(\n                job_id, stage_key, shot_id, 0.35,\n                f\"Image generation failed for {shot_id}: {e}\",\n            )\n            if strict_flux:\n                raise\n            _create_placeholder_image(output_path)\n            self._register_artifact(job_id, step_id, \"image\", str(output_path), shot_id)\n\n    async def _run_standard_image_gen(\n""",
+              "visual exception behavior",
+          )
+
+          replace_once(
+              """        shot_id = step.get(\"shot_id\", \"\")\n        stage_key = step[\"stage_key\"]\n        step_id = step[\"id\"]\n\n        # Skip if shot doesn't exist in plan\n        if project_id and not self._shot_exists_in_plan(shot_id, project_id):\n""",
+              """        shot_id = step.get(\"shot_id\", \"\")\n        stage_key = step[\"stage_key\"]\n        step_id = step[\"id\"]\n        provider_plan = resolve_video_provider_plan(settings)\n\n        # Skip if shot doesn't exist in plan\n        if project_id and not self._shot_exists_in_plan(shot_id, project_id):\n""",
+              "video provider plan",
+          )
+
+          replace_once(
+              """        comfy = await self._get_comfy()\n        if not await comfy.is_available():\n            self.repo.set_job_progress(\n                job_id, stage_key, shot_id, 0.45,\n                f\"ComfyUI not available, skipping AI video for {shot_id}\",\n            )\n            return\n""",
+              """        comfy = await self._get_comfy()\n        if not await comfy.is_available():\n            message = f\"ComfyUI not available for AI video {shot_id}\"\n            self.repo.set_job_progress(job_id, stage_key, shot_id, 0.45, message)\n            if provider_plan.enforced:\n                raise RuntimeError(message)\n            return\n""",
+              "video unavailable behavior",
+          )
+
+          replace_once(
+              """            from backend.production.providers import VideoRequest\n            from backend.production.workflow_templates import WorkflowTemplate\n            from backend.production.comfy_video import WanVideoProvider\n\n            # Load Wan2.2 workflow via the central registry.\n            from backend.production.workflow_registry import select_wan_video_workflow\n            workflow_spec = select_wan_video_workflow(has_end_frame=bool(end_frame_path))\n            workflow_name = workflow_spec.path.name\n            workflow_path = workflow_spec.path\n            if not workflow_path.exists():\n                self.repo.set_job_progress(\n                    job_id, stage_key, shot_id, 0.45,\n                    f\"Wan2.2 workflow {workflow_name} not found, skipping AI video\",\n                )\n                return\n\n            template = WorkflowTemplate.load(workflow_path)\n\n            # Load plan to get shot prompt\n""",
+              """            from backend.production.providers import VideoRequest\n            from backend.production.workflow_templates import WorkflowTemplate\n            from backend.production.comfy_video import WanVideoProvider\n\n            wan_template = None\n            if \"wan\" in provider_plan.providers:\n                from backend.production.workflow_registry import select_wan_video_workflow\n                workflow_spec = select_wan_video_workflow(has_end_frame=bool(end_frame_path))\n                workflow_name = workflow_spec.path.name\n                workflow_path = workflow_spec.path\n                if workflow_path.exists():\n                    wan_template = WorkflowTemplate.load(workflow_path)\n                elif provider_plan.providers == (\"wan\",):\n                    message = f\"Wan2.2 workflow {workflow_name} not found\"\n                    self.repo.set_job_progress(job_id, stage_key, shot_id, 0.45, message)\n                    if provider_plan.enforced:\n                        raise RuntimeError(message)\n                    return\n\n            # Load plan to get shot prompt\n""",
+              "video provider setup",
+          )
+
+          replace_once(
+              """            provider = WanVideoProvider(adapter=comfy, template=template)\n            request = VideoRequest(\n                image_path=image_path,\n                prompt=shot_prompt,\n                negative_prompt=shot_negative,\n                seed=shot_seed,\n                width=gen_width,\n                height=gen_height,\n                frames=video_frames,\n                fps=video_fps,\n                output_path=output_path,\n                motion_bucket_id=motion_bucket_id,\n                denoise_strength=denoise_strength,\n                ai_video=True,\n                end_frame_path=end_frame_path,  # FLF2V: pass last frame for interpolation\n            )\n            await provider.generate(request)\n\n            # GPT P0: Video Contract 硬门禁 —— 不合格视频禁止进入下游\n""",
+              """            last_provider_error = None\n            for provider_name in provider_plan.providers:\n                try:\n                    if provider_name == \"minimax_h3\":\n                        from backend.production.minimax_h3_adapter import MiniMaxH3VideoProvider\n                        provider = MiniMaxH3VideoProvider(adapter=comfy)\n                    elif provider_name == \"wan\":\n                        if wan_template is None:\n                            raise RuntimeError(\"Wan2.2 workflow is unavailable\")\n                        provider = WanVideoProvider(adapter=comfy, template=wan_template)\n                    else:\n                        raise RuntimeError(f\"Unsupported video provider: {provider_name}\")\n\n                    request = VideoRequest(\n                        image_path=image_path,\n                        prompt=shot_prompt,\n                        negative_prompt=shot_negative,\n                        seed=shot_seed,\n                        width=gen_width,\n                        height=gen_height,\n                        frames=video_frames,\n                        fps=video_fps,\n                        output_path=output_path,\n                        motion_bucket_id=motion_bucket_id,\n                        denoise_strength=denoise_strength,\n                        ai_video=True,\n                        end_frame_path=end_frame_path,\n                        engine=provider_name,\n                    )\n                    await provider.generate(request)\n                    last_provider_error = None\n                    break\n                except Exception as provider_error:\n                    last_provider_error = provider_error\n                    if provider_plan.required:\n                        raise\n                    logger.warning(\n                        \"Video provider %s failed for %s; trying explicit fallback if configured: %s\",\n                        provider_name, shot_id, provider_error,\n                    )\n            if last_provider_error is not None:\n                raise last_provider_error\n\n            # GPT P0: Video Contract 硬门禁 —— 不合格视频禁止进入下游\n""",
+              "video provider execution",
+          )
+
+          replace_once(
+              """        except Exception as e:\n            self.repo.set_job_progress(\n                job_id, stage_key, shot_id, 0.45,\n                f\"AI video generation failed for {shot_id}: {e}\",\n            )\n\n    async def _run_audio_stage(\n""",
+              """        except Exception as e:\n            self.repo.set_job_progress(\n                job_id, stage_key, shot_id, 0.45,\n                f\"AI video generation failed for {shot_id}: {e}\",\n            )\n            if provider_plan.enforced:\n                raise\n\n    async def _run_audio_stage(\n""",
+              "video exception behavior",
+          )
+
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit worker patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/orchestration/worker.py
+          git diff --cached --check
+          git commit -m "feat: enforce template provider policy in stage runtime"
+          git push origin HEAD:feat/v0.9.1-template-persistence
