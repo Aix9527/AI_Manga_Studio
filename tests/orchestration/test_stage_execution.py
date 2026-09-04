@@ -107,7 +107,7 @@ def test_waiting_review_fails_closed_without_step_mutation(tmp_path):
     assert after == before
 
 
-def test_continue_from_one_shot_invalidates_only_its_visual_path_and_global_outputs(tmp_path):
+def test_continue_from_one_shot_reopens_only_its_visual_path_and_global_outputs(tmp_path):
     db, repo, service, job_id = _system(tmp_path)
     _complete_all_steps(db, job_id)
     _force_job_status(db, job_id, JobStatus.PAUSED)
@@ -125,10 +125,34 @@ def test_continue_from_one_shot_invalidates_only_its_visual_path_and_global_outp
     assert result.id == job_id
     assert result.status == JobStatus.QUEUED
     assert current[("visual_generate", "shot_001")]["status"] == StepStatus.QUEUED
-    assert current[("hd_redraw", "shot_001")]["status"] == StepStatus.INVALIDATED
-    assert current[("video_generate", "shot_001")]["status"] == StepStatus.INVALIDATED
+    assert current[("hd_redraw", "shot_001")]["status"] == StepStatus.PENDING
+    assert current[("video_generate", "shot_001")]["status"] == StepStatus.PENDING
     assert current[("visual_generate", "shot_002")]["status"] == StepStatus.COMPLETED
     assert current[("hd_redraw", "shot_002")]["status"] == StepStatus.COMPLETED
+    assert current[("video_generate", "shot_002")]["status"] == StepStatus.COMPLETED
+    assert current[("audio_tts", "")]["status"] == StepStatus.PENDING
+    assert current[("audio_sfx", "")]["status"] == StepStatus.PENDING
+    assert current[("composition_compose", "")]["status"] == StepStatus.PENDING
+    assert current[("export", "")]["status"] == StepStatus.PENDING
+
+
+def test_rerun_node_leaves_downstream_dependencies_invalidated(tmp_path):
+    db, repo, service, job_id = _system(tmp_path)
+    _complete_all_steps(db, job_id)
+    _force_job_status(db, job_id, JobStatus.PAUSED)
+
+    result = service.execute_from_stage(
+        job_id,
+        StageExecutionRequest(
+            stage_key="video_generate",
+            shot_id="shot_001",
+            mode="rerun_node",
+        ),
+    )
+
+    current = _steps(repo, job_id)
+    assert result.status == JobStatus.QUEUED
+    assert current[("video_generate", "shot_001")]["status"] == StepStatus.QUEUED
     assert current[("video_generate", "shot_002")]["status"] == StepStatus.COMPLETED
     assert current[("audio_tts", "")]["status"] == StepStatus.INVALIDATED
     assert current[("audio_sfx", "")]["status"] == StepStatus.INVALIDATED
@@ -136,7 +160,7 @@ def test_continue_from_one_shot_invalidates_only_its_visual_path_and_global_outp
     assert current[("export", "")]["status"] == StepStatus.INVALIDATED
 
 
-def test_planning_rewind_invalidates_every_later_stage(tmp_path):
+def test_planning_continue_reopens_every_later_stage(tmp_path):
     db, repo, service, job_id = _system(tmp_path)
     _complete_all_steps(db, job_id)
     _force_job_status(db, job_id, JobStatus.FAILED)
@@ -149,7 +173,7 @@ def test_planning_rewind_invalidates_every_later_stage(tmp_path):
     rows = repo.get_job_steps(job_id)
     planning_index = next(i for i, row in enumerate(rows) if row["stage_key"] == "planning")
     assert rows[planning_index]["status"] == StepStatus.QUEUED
-    assert all(row["status"] == StepStatus.INVALIDATED for row in rows[planning_index + 1 :])
+    assert all(row["status"] == StepStatus.PENDING for row in rows[planning_index + 1 :])
 
 
 def test_running_and_queued_jobs_fail_closed(tmp_path):
