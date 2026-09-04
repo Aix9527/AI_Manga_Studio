@@ -25,6 +25,12 @@ _REQUIRED_STAGES = {
 }
 
 _KNOWN_PROVIDERS = {"minimax_h3", "wan", "flux", "cosyvoice"}
+_RUNTIME_ENFORCEABLE_PROVIDERS = {"minimax_h3", "wan", "flux"}
+_STAGE_PROVIDERS = {
+    "visual_generate": {"flux"},
+    "video_generate": {"minimax_h3", "wan"},
+    "audio_tts": {"cosyvoice"},
+}
 _PROVIDER_MODES = {"runtime_default", "preferred", "required"}
 _FORBIDDEN_KEYS = {
     "skip_qc",
@@ -56,7 +62,9 @@ def sha256_json(value: Any) -> str:
 
 class CanonicalTemplateCompiler:
     def __init__(self, available_providers: set[str] | None = None):
-        self.available_providers = set(available_providers or _KNOWN_PROVIDERS)
+        self.available_providers = set(
+            _RUNTIME_ENFORCEABLE_PROVIDERS if available_providers is None else available_providers
+        )
 
     def compile(self, value: dict[str, object]) -> dict[str, object]:
         if int(value.get("schema_version") or 0) != 1:
@@ -172,11 +180,11 @@ class CanonicalTemplateCompiler:
             entry: dict[str, object] = {"stage_key": stage_key, "enabled": enabled}
             provider_policy = item.get("provider_policy")
             if provider_policy is not None:
-                entry["provider_policy"] = self._compile_provider_policy(provider_policy)
+                entry["provider_policy"] = self._compile_provider_policy(provider_policy, stage_key)
             compiled.append(entry)
         return compiled
 
-    def _compile_provider_policy(self, raw: object) -> dict[str, object]:
+    def _compile_provider_policy(self, raw: object, stage_key: str) -> dict[str, object]:
         if not isinstance(raw, dict):
             raise TemplateValidationError("provider_policy must be an object")
         mode = str(raw.get("mode") or "runtime_default")
@@ -184,6 +192,8 @@ class CanonicalTemplateCompiler:
             raise TemplateValidationError(f"unsupported provider mode: {mode}")
         provider = str(raw.get("provider") or "")
         fallback = str(raw.get("fallback") or "")
+        allowed_for_stage = _STAGE_PROVIDERS.get(stage_key, set())
+
         if provider and provider not in _KNOWN_PROVIDERS:
             raise TemplateValidationError(
                 f"unknown provider: {provider}", code="TEMPLATE_PROVIDER_POLICY_UNSUPPORTED"
@@ -191,6 +201,16 @@ class CanonicalTemplateCompiler:
         if fallback and fallback not in _KNOWN_PROVIDERS:
             raise TemplateValidationError(
                 f"unknown provider fallback: {fallback}",
+                code="TEMPLATE_PROVIDER_POLICY_UNSUPPORTED",
+            )
+        if provider and provider not in allowed_for_stage:
+            raise TemplateValidationError(
+                f"provider {provider} is not valid for stage {stage_key}",
+                code="TEMPLATE_PROVIDER_POLICY_UNSUPPORTED",
+            )
+        if fallback and fallback not in allowed_for_stage:
+            raise TemplateValidationError(
+                f"provider fallback {fallback} is not valid for stage {stage_key}",
                 code="TEMPLATE_PROVIDER_POLICY_UNSUPPORTED",
             )
 
