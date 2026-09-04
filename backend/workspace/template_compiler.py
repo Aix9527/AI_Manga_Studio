@@ -115,14 +115,26 @@ class CanonicalTemplateCompiler:
         for edge in edges:
             if not isinstance(edge, dict):
                 raise TemplateValidationError("canvas edge must be an object")
-            source_stage = node_stages.get(str(edge.get("source") or ""))
-            target_stage = node_stages.get(str(edge.get("target") or ""))
+            source_id = str(edge.get("source") or "")
+            target_id = str(edge.get("target") or "")
+            source_stage = node_stages.get(source_id)
+            target_stage = node_stages.get(target_id)
             if not source_stage or not target_stage or source_stage == target_stage:
                 continue
-            # Multiple UI nodes may represent the same canonical stage. Ignore edges
-            # that touch those aliases; canonical execution order remains backend-owned.
-            if stage_counts.get(source_stage, 0) > 1 or stage_counts.get(target_stage, 0) > 1:
+
+            # The current Canvas exposes two UI views of the single planning
+            # stage: scene before character design and storyboard after it.
+            # Only that known alias bridge may look reverse relative to the
+            # canonical pipeline. Do not broadly exempt every edge touching a
+            # duplicated stage, because that would allow video -> scene/planning.
+            if (
+                target_id == "storyboard"
+                and target_stage == "planning"
+                and source_stage == "character_design"
+                and stage_counts.get("planning", 0) > 1
+            ):
                 continue
+
             if order[source_stage] > order[target_stage]:
                 raise TemplateValidationError(
                     f"invalid canonical dependency: {source_stage} -> {target_stage}",
