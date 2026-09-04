@@ -27,13 +27,15 @@ describe("AdvancedCanvasWorkspace", () => {
     expect(screen.getByText(/默认流程：小说文本/)).toHaveTextContent("TI2V视频生成");
   });
 
-  it("reports local professional-mode actions without bypassing orchestration", () => {
+  it("delegates execution to the real production job instead of claiming a node ran", () => {
     render(<AdvancedCanvasWorkspace />);
 
     fireEvent.click(screen.getByRole("button", { name: "运行选中节点" }));
-    expect(screen.getByText("运行选中节点：TI2V视频生成")).toBeInTheDocument();
+    expect(screen.getByText(/高级画布暂不直接提交单节点任务：TI2V视频生成/)).toBeInTheDocument();
+    expect(screen.getByText(/项目台或时间线任务队列/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "发布到一键成片" }));
-    expect(screen.getByText("当前流程已设为一键成片专业模板")).toBeInTheDocument();
+    expect(screen.getByText(/模板发布尚未接入持久化契约/)).toBeInTheDocument();
+    expect(screen.queryByText("当前流程已设为一键成片专业模板")).not.toBeInTheDocument();
   });
 });
