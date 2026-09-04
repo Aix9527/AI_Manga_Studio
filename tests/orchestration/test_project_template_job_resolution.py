@@ -9,6 +9,7 @@ from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.repository import JobRepository
 from backend.orchestration.schemas import JobCreate
 from backend.orchestration.service import JobService
+from backend.orchestration.template_resolution import resolve_project_template_job_create
 from backend.orchestration.worker import SSEBroadcaster
 from backend.workspace.models import ProductionTemplateSaveRequest
 from backend.workspace.repository import WorkspaceRepository
@@ -66,10 +67,14 @@ def _stored_settings(repo: JobRepository, job_id: str) -> dict:
     return json.loads(row["settings"])
 
 
-def test_no_published_template_preserves_request_defaults_and_records_source(tmp_path):
-    _, repo, service, _ = _system(tmp_path)
+def _create(db: OrchestrationDatabase, service: JobService, data: JobCreate):
+    return service.create(resolve_project_template_job_create(db, data))
 
-    job = service.create(JobCreate(project_id="project-a", input_path="story.txt"))
+
+def test_no_published_template_preserves_request_defaults_and_records_source(tmp_path):
+    db, repo, service, _ = _system(tmp_path)
+
+    job = _create(db, service, JobCreate(project_id="project-a", input_path="story.txt"))
     settings = _stored_settings(repo, job.id)
 
     assert settings["width"] == 1080
@@ -80,11 +85,11 @@ def test_no_published_template_preserves_request_defaults_and_records_source(tmp
 
 
 def test_published_template_overrides_job_settings_and_records_provenance(tmp_path):
-    _, repo, service, templates = _system(tmp_path)
+    db, repo, service, templates = _system(tmp_path)
     saved = templates.save("project-a", _template(1440))
     templates.publish("project-a", saved.version)
 
-    job = service.create(JobCreate(project_id="project-a", input_path="story.txt"))
+    job = _create(db, service, JobCreate(project_id="project-a", input_path="story.txt"))
     settings = _stored_settings(repo, job.id)
 
     assert settings["width"] == 1440
@@ -100,14 +105,14 @@ def test_published_template_overrides_job_settings_and_records_provenance(tmp_pa
 
 
 def test_existing_job_keeps_v1_after_v2_is_published(tmp_path):
-    _, repo, service, templates = _system(tmp_path)
+    db, repo, service, templates = _system(tmp_path)
     v1 = templates.save("project-a", _template(1200, "v1"))
     templates.publish("project-a", v1.version)
-    job_a = service.create(JobCreate(project_id="project-a", input_path="a.txt"))
+    job_a = _create(db, service, JobCreate(project_id="project-a", input_path="a.txt"))
 
     v2 = templates.save("project-a", _template(1600, "v2"))
     templates.publish("project-a", v2.version)
-    job_b = service.create(JobCreate(project_id="project-a", input_path="b.txt"))
+    job_b = _create(db, service, JobCreate(project_id="project-a", input_path="b.txt"))
 
     settings_a = _stored_settings(repo, job_a.id)
     settings_b = _stored_settings(repo, job_b.id)
@@ -128,6 +133,6 @@ def test_corrupt_published_template_prevents_job_creation(tmp_path):
         )
 
     with pytest.raises(TemplatePublishConflict, match="hash mismatch"):
-        service.create(JobCreate(project_id="project-a", input_path="story.txt"))
+        _create(db, service, JobCreate(project_id="project-a", input_path="story.txt"))
 
     assert repo.list_jobs(project_id="project-a", limit=10, offset=0) == []
