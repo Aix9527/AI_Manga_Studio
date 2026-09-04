@@ -73,6 +73,16 @@ def test_reverse_dependency_between_distinct_canonical_stages_is_rejected():
         CanonicalTemplateCompiler().compile(value)
 
 
+def test_reverse_dependency_into_planning_alias_is_rejected():
+    from backend.workspace.template_compiler import CanonicalTemplateCompiler, TemplateValidationError
+
+    value = _default_template()
+    value["canvas"]["edges"].append({"source": "video", "target": "scene"})
+
+    with pytest.raises(TemplateValidationError, match="dependency"):
+        CanonicalTemplateCompiler().compile(value)
+
+
 def test_required_stage_cannot_be_disabled():
     from backend.workspace.template_compiler import CanonicalTemplateCompiler, TemplateValidationError
 
