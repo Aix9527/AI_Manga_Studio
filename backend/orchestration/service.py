@@ -29,6 +29,7 @@ from backend.orchestration.schemas import (
     RetryRequest,
     ReviewRequest,
     JobCommandRequest,
+    StageExecutionRequest,
     RollbackPreview,
     JobListResponse,
 )
@@ -37,6 +38,22 @@ from backend.orchestration.worker import SSEBroadcaster
 # Default shot count for pre-created stages.
 # The planning stage may produce fewer shots; executor skips non-existent ones.
 DEFAULT_MAX_SHOTS = 20
+
+SHOT_SCOPED_EXECUTION_STAGES = frozenset({"visual_generate", "hd_redraw", "video_generate"})
+STAGE_EXECUTION_ALLOWED_JOB_STATES = frozenset({
+    JobStatus.PAUSED,
+    JobStatus.FAILED,
+    JobStatus.RETRY_WAIT,
+    JobStatus.COMPLETED,
+})
+
+
+class StageExecutionConflict(ValueError):
+    """The requested canvas stage cannot be executed from the current Job state."""
+
+
+class StageExecutionTargetNotFound(ValueError):
+    """The requested canonical stage/shot does not resolve to exactly one Job step."""
 
 
 def build_production_stages(
@@ -164,6 +181,122 @@ class JobService:
                     allowed_from={StepStatus.WAITING_REVIEW},
                 )
             self.repo.set_job_status(job_id, JobStatus.QUEUED, allowed_from={JobStatus.WAITING_REVIEW})
+        return self._build_detail(job_id)
+
+    def execute_from_stage(self, job_id: str, request: StageExecutionRequest) -> JobDetail:
+        """Rewind the existing production Job to one validated canonical boundary.
+
+        This command deliberately does not create a new Job or call a provider.  It
+        only mutates orchestration state so the existing worker can execute the
+        requested target.  ``continue`` reopens dependency-scoped downstream work;
+        ``rerun_node`` leaves downstream work invalidated and uses ``desired_state``
+        as a one-shot worker stop boundary after the target completes.
+        """
+        requested_stage = request.stage_key.strip()
+        requested_shot = request.shot_id.strip()
+        if requested_stage in SHOT_SCOPED_EXECUTION_STAGES and not requested_shot:
+            raise StageExecutionConflict(f"stage {requested_stage} requires shot_id")
+        if requested_stage not in SHOT_SCOPED_EXECUTION_STAGES and requested_shot:
+            raise StageExecutionConflict(f"stage {requested_stage} does not accept shot_id")
+
+        with self.db.transaction(immediate=True) as conn:
+            job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if job is None:
+                raise StageExecutionTargetNotFound(f"Job not found: {job_id}")
+            current = JobStatus(job["status"])
+            if current not in STAGE_EXECUTION_ALLOWED_JOB_STATES:
+                raise StageExecutionConflict(f"job state {current.value} cannot execute from stage")
+
+            rows = conn.execute(
+                "SELECT * FROM job_steps WHERE job_id=? ORDER BY sequence", (job_id,)
+            ).fetchall()
+            matches = [
+                row for row in rows
+                if row["stage_key"] == requested_stage and (row["shot_id"] or "") == requested_shot
+            ]
+            if len(matches) != 1:
+                raise StageExecutionTargetNotFound(
+                    f"stage target must resolve exactly once: {requested_stage}/{requested_shot}"
+                )
+            target = matches[0]
+
+            downstream = [
+                row for row in rows
+                if row["sequence"] > target["sequence"]
+                and (
+                    not requested_shot
+                    or (row["shot_id"] or "") in {requested_shot, ""}
+                )
+            ]
+            affected_step_ids = [target["id"], *[row["id"] for row in downstream]]
+
+            target_cursor = conn.execute(
+                """UPDATE job_steps
+                   SET status=?, progress=0.0, error_code='', error_message='',
+                       quality_attempt=0, quality_report='{}', started_at=NULL, finished_at=NULL
+                   WHERE id=? AND job_id=?""",
+                (StepStatus.QUEUED.value, target["id"], job_id),
+            )
+            if target_cursor.rowcount != 1:
+                raise StageExecutionConflict("stage target changed before rewind")
+
+            downstream_status = (
+                StepStatus.PENDING.value
+                if request.mode == "continue"
+                else StepStatus.INVALIDATED.value
+            )
+            for row in downstream:
+                conn.execute(
+                    """UPDATE job_steps
+                       SET status=?, progress=0.0, error_code='', error_message='',
+                           quality_attempt=0, quality_report='{}', started_at=NULL, finished_at=NULL
+                       WHERE id=? AND job_id=?""",
+                    (downstream_status, row["id"], job_id),
+                )
+
+            placeholders = ",".join("?" for _ in affected_step_ids)
+            if affected_step_ids:
+                conn.execute(
+                    f"UPDATE artifacts SET active=0 WHERE job_id=? AND step_id IN ({placeholders}) AND active=1",
+                    (job_id, *affected_step_ids),
+                )
+                conn.execute(
+                    f"DELETE FROM checkpoints WHERE job_id=? AND step_id IN ({placeholders})",
+                    (job_id, *affected_step_ids),
+                )
+
+            desired_state = (
+                "running"
+                if request.mode == "continue"
+                else f"pause_after_step:{target['id']}"
+            )
+            conn.execute(
+                """UPDATE jobs
+                   SET status=?, desired_state=?, current_stage=?, current_shot=?,
+                       message=?, final_video='', finished_at=NULL,
+                       lease_id=NULL, lease_expires_at=NULL, updated_at=datetime('now')
+                   WHERE id=?""",
+                (
+                    JobStatus.QUEUED.value,
+                    desired_state,
+                    requested_stage,
+                    requested_shot,
+                    f"Stage execution requested: {requested_stage} ({request.mode})",
+                    job_id,
+                ),
+            )
+
+        self.broadcaster.broadcast(
+            job_id,
+            "stage_execution_requested",
+            {
+                "job_id": job_id,
+                "step_id": str(target["id"]),
+                "stage_key": requested_stage,
+                "shot_id": requested_shot,
+                "mode": request.mode,
+            },
+        )
         return self._build_detail(job_id)
 
     def cancel(self, job_id: str) -> JobDetail:
