@@ -9,7 +9,14 @@ from backend.orchestration.repository import ReviewJobNotFound, ReviewTransition
 from backend.orchestration.service import JobService
 from backend.orchestration.schemas import JobDetail
 from backend.orchestration.worker import SSEBroadcaster
-from backend.workspace.models import ProjectAsset, StageAutomation, StageKey, StageSummary, WorkspaceSnapshot
+from backend.workspace.models import (
+    DirectorSettings,
+    ProjectAsset,
+    StageAutomation,
+    StageKey,
+    StageSummary,
+    WorkspaceSnapshot,
+)
 from backend.workspace.repository import WorkspaceRepository
 
 
@@ -106,6 +113,21 @@ class WorkspaceService:
             quality_status=quality_status,
             active=active,
         )
+
+    def update_director_settings(
+        self,
+        project_id: str,
+        asset_id: int,
+        value: DirectorSettings,
+    ) -> ProjectAsset:
+        asset = self.repo.update_project_asset_director(
+            project_id,
+            asset_id,
+            value.model_dump(mode="json"),
+        )
+        if asset is None:
+            raise AssetNotFound
+        return asset
 
     def get_asset_media(self, project_id: str, asset_id: int) -> tuple[Path, str] | None:
         stored_path = self.repo.get_project_asset_stored_path(project_id, asset_id)
