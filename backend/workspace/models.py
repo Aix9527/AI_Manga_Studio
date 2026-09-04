@@ -37,6 +37,28 @@ class DirectorSettings(BaseModel):
     prompt: str = ""
 
 
+class ProductionTemplateVersion(BaseModel):
+    id: str
+    project_id: str
+    version: int
+    name: str = ""
+    schema_version: int = 1
+    content_json: str
+    content_sha256: str
+    compiled_json: str
+    compiled_sha256: str
+    status: str = "active"
+    created_at: str
+    published_at: str | None = None
+
+
+class ProductionTemplateList(BaseModel):
+    project_id: str
+    latest_version: int = 0
+    published_version: int | None = None
+    versions: list[ProductionTemplateVersion] = Field(default_factory=list)
+
+
 class StageSummary(BaseModel):
     stage_key: StageKey
     status: str = "pending"
