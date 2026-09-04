@@ -4,7 +4,11 @@ from fastapi.responses import FileResponse
 from backend.orchestration.schemas import JobDetail
 from backend.workspace.models import (
     DirectorSettings,
+    ProductionTemplateList,
+    ProductionTemplateSaveRequest,
+    ProductionTemplateVersion,
     ProjectAsset,
+    PublishedProductionTemplate,
     StageAutomation,
     StageKey,
     WorkspaceSnapshot,
@@ -17,6 +21,12 @@ from backend.workspace.service import (
     UnsupportedAssetMedia,
     WorkspaceService,
 )
+from backend.workspace.template_compiler import TemplateValidationError
+from backend.workspace.template_service import (
+    ProductionTemplateService,
+    TemplatePublishConflict,
+    TemplateVersionNotFound,
+)
 
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
@@ -24,6 +34,72 @@ router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
 def _service(request: Request) -> WorkspaceService:
     return request.app.state.workspace_service
+
+
+def _template_service(request: Request) -> ProductionTemplateService:
+    return ProductionTemplateService(_service(request).repo)
+
+
+def _template_error(code: str, message: str, status_code: int) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
+@router.post("/{project_id}/production-templates", response_model=ProductionTemplateVersion)
+async def save_production_template(
+    project_id: str,
+    value: ProductionTemplateSaveRequest,
+    request: Request,
+) -> ProductionTemplateVersion:
+    try:
+        return _template_service(request).save(project_id, value)
+    except TemplateValidationError as error:
+        status = 422 if error.code in {
+            "TEMPLATE_PROVIDER_POLICY_UNSUPPORTED",
+            "TEMPLATE_STAGE_POLICY_INVALID",
+        } else 400
+        raise _template_error(error.code, error.message, status) from error
+
+
+@router.get("/{project_id}/production-templates", response_model=ProductionTemplateList)
+async def list_production_templates(project_id: str, request: Request) -> ProductionTemplateList:
+    return _template_service(request).list(project_id)
+
+
+@router.get("/{project_id}/production-template/published", response_model=PublishedProductionTemplate)
+async def get_published_production_template(
+    project_id: str,
+    request: Request,
+) -> PublishedProductionTemplate:
+    try:
+        return _template_service(request).published(project_id)
+    except TemplatePublishConflict as error:
+        raise _template_error(error.code, str(error), 409) from error
+
+
+@router.get("/{project_id}/production-templates/{version}", response_model=ProductionTemplateVersion)
+async def get_production_template(
+    project_id: str,
+    version: int,
+    request: Request,
+) -> ProductionTemplateVersion:
+    try:
+        return _template_service(request).get(project_id, version)
+    except TemplateVersionNotFound as error:
+        raise _template_error(error.code, str(error), 404) from error
+
+
+@router.post("/{project_id}/production-templates/{version}/publish", response_model=ProductionTemplateVersion)
+async def publish_production_template(
+    project_id: str,
+    version: int,
+    request: Request,
+) -> ProductionTemplateVersion:
+    try:
+        return _template_service(request).publish(project_id, version)
+    except TemplateVersionNotFound as error:
+        raise _template_error(error.code, str(error), 404) from error
+    except TemplatePublishConflict as error:
+        raise _template_error(error.code, str(error), 409) from error
 
 
 @router.get("/{project_id}", response_model=WorkspaceSnapshot)
