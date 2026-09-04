@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { PlayCircleOutlined, ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { PlayCircleOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined } from "@ant-design/icons";
 
 import { userMessage } from "@/api/client";
-import { workspaceApi } from "@/api/workspace";
+import { workspaceApi, type DirectorSettingsPayload } from "@/api/workspace";
 import { useJobStore } from "@/state/jobStore";
 import { useWorkspaceStore } from "@/state/workspaceStore";
 import type { ProjectAsset } from "@/workbench/types";
@@ -15,6 +15,18 @@ interface ShotView {
 }
 
 const CAMERA = ["推镜", "平移", "跟拍", "摇镜"] as const;
+const EMOTIONS = ["紧张", "压迫", "危机"] as const;
+
+const DEFAULT_DIRECTOR: DirectorSettingsPayload = {
+  composition: "三分构图",
+  shot_size: "中近景",
+  camera_movement: "推镜",
+  movement_strength: 65,
+  focal_length: "35mm",
+  lighting: "电影逆光",
+  emotion: ["紧张"],
+  prompt: "电影感构图，角色保持一致，环境具有明确空间层次，镜头运动自然连贯。",
+};
 
 function mediaShot(asset: ProjectAsset, index: number): ShotView {
   return {
@@ -23,6 +35,12 @@ function mediaShot(asset: ProjectAsset, index: number): ShotView {
     duration: Number(asset.metadata?.duration || 5),
     asset,
   };
+}
+
+function storedDirector(asset?: ProjectAsset): Partial<DirectorSettingsPayload> {
+  const value = asset?.metadata?.director;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Partial<DirectorSettingsPayload>;
 }
 
 const fallbackShots: ShotView[] = Array.from({ length: 8 }).map((_, index) => ({
@@ -37,8 +55,15 @@ const StoryboardDirectorWorkspace: React.FC = () => {
   const { jobs, reviewJob, refreshJob } = useJobStore();
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [selectedId, setSelectedId] = useState<string>(fallbackShots[0].id);
+  const [composition, setComposition] = useState(DEFAULT_DIRECTOR.composition);
+  const [shotSize, setShotSize] = useState(DEFAULT_DIRECTOR.shot_size);
   const [camera, setCamera] = useState<(typeof CAMERA)[number]>("推镜");
-  const [prompt, setPrompt] = useState("电影感构图，角色保持一致，环境具有明确空间层次，镜头运动自然连贯。");
+  const [movementStrength, setMovementStrength] = useState(DEFAULT_DIRECTOR.movement_strength);
+  const [focalLength, setFocalLength] = useState(DEFAULT_DIRECTOR.focal_length);
+  const [lighting, setLighting] = useState(DEFAULT_DIRECTOR.lighting);
+  const [emotions, setEmotions] = useState<string[]>(DEFAULT_DIRECTOR.emotion);
+  const [prompt, setPrompt] = useState(DEFAULT_DIRECTOR.prompt);
+  const [savingDirector, setSavingDirector] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,6 +90,21 @@ const StoryboardDirectorWorkspace: React.FC = () => {
     && selectedJob?.status === "waiting_review"
     && selectedReviewStep?.status === "waiting_review",
   );
+
+  useEffect(() => {
+    const saved = storedDirector(selectedAsset);
+    const next = { ...DEFAULT_DIRECTOR, ...saved };
+    setComposition(String(next.composition));
+    setShotSize(String(next.shot_size));
+    setCamera(CAMERA.includes(next.camera_movement as (typeof CAMERA)[number])
+      ? next.camera_movement as (typeof CAMERA)[number]
+      : "推镜");
+    setMovementStrength(Number(next.movement_strength));
+    setFocalLength(String(next.focal_length));
+    setLighting(String(next.lighting));
+    setEmotions(Array.isArray(next.emotion) ? next.emotion.map(String) : []);
+    setPrompt(String(next.prompt));
+  }, [selectedAsset?.id]);
 
   const continueToVideo = async () => {
     if (!selectedAsset || !canReviewSelected) {
@@ -95,6 +135,38 @@ const StoryboardDirectorWorkspace: React.FC = () => {
     } catch (error) {
       setMessage(userMessage(error));
     }
+  };
+
+  const saveDirectorSettings = async () => {
+    if (!selectedAsset) {
+      setMessage("当前镜头尚未生成资产，无法保存导演参数。");
+      return;
+    }
+    setSavingDirector(true);
+    try {
+      const updated = await workspaceApi.updateDirectorSettings(projectId, selectedAsset.id, {
+        composition,
+        shot_size: shotSize,
+        camera_movement: camera,
+        movement_strength: movementStrength,
+        focal_length: focalLength,
+        lighting,
+        emotion: emotions,
+        prompt,
+      });
+      setAssets((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setMessage(`导演参数已保存 · ${selected.title}`);
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setSavingDirector(false);
+    }
+  };
+
+  const toggleEmotion = (emotion: string) => {
+    setEmotions((current) => current.includes(emotion)
+      ? current.filter((item) => item !== emotion)
+      : [...current, emotion]);
   };
 
   return (
@@ -167,22 +239,23 @@ const StoryboardDirectorWorkspace: React.FC = () => {
         <div className="inspector-section">
           <h3>角色与场景</h3>
           <div className="director-chip-row"><span className="director-chip is-active">主角</span><span className="director-chip">配角</span><span className="director-chip">环境角色</span></div>
-          <div className="inspector-field"><label>场景</label><select defaultValue="当前场景"><option>当前场景</option></select></div>
-          <div className="inspector-field"><label>道具</label><input defaultValue="核心道具 / 环境道具" /></div>
+          <div className="inspector-field"><label htmlFor="director-scene">场景</label><select id="director-scene" defaultValue="当前场景"><option>当前场景</option></select></div>
+          <div className="inspector-field"><label htmlFor="director-prop">道具</label><input id="director-prop" defaultValue="核心道具 / 环境道具" /></div>
         </div>
         <div className="inspector-section">
           <h3>摄影机</h3>
-          <div className="inspector-field"><label>构图</label><select defaultValue="三分构图"><option>三分构图</option><option>中心构图</option><option>对称构图</option></select></div>
-          <div className="inspector-field"><label>景别</label><select defaultValue="中近景"><option>远景</option><option>全景</option><option>中景</option><option>中近景</option><option>特写</option></select></div>
+          <div className="inspector-field"><label htmlFor="director-composition">构图</label><select id="director-composition" value={composition} onChange={(event) => setComposition(event.target.value)}><option>三分构图</option><option>中心构图</option><option>对称构图</option></select></div>
+          <div className="inspector-field"><label htmlFor="director-shot-size">景别</label><select id="director-shot-size" value={shotSize} onChange={(event) => setShotSize(event.target.value)}><option>远景</option><option>全景</option><option>中景</option><option>中近景</option><option>特写</option></select></div>
           <div className="camera-buttons">{CAMERA.map((item) => <button key={item} type="button" className={camera === item ? "is-active" : ""} onClick={() => setCamera(item)}>{item}</button>)}</div>
-          <div className="inspector-field"><label>运动强度</label><input type="range" min="0" max="100" defaultValue="65" /></div>
-          <div className="inspector-field"><label>焦段</label><select defaultValue="35mm"><option>24mm</option><option>35mm</option><option>50mm</option><option>85mm</option></select></div>
-          <div className="inspector-field"><label>光线</label><select defaultValue="电影逆光"><option>电影逆光</option><option>柔光</option><option>硬质侧光</option><option>环境自然光</option></select></div>
+          <div className="inspector-field"><label htmlFor="director-movement">运动强度</label><input id="director-movement" type="range" min="0" max="100" value={movementStrength} onChange={(event) => setMovementStrength(Number(event.target.value))} /></div>
+          <div className="inspector-field"><label htmlFor="director-focal">焦段</label><select id="director-focal" value={focalLength} onChange={(event) => setFocalLength(event.target.value)}><option>24mm</option><option>35mm</option><option>50mm</option><option>85mm</option></select></div>
+          <div className="inspector-field"><label htmlFor="director-lighting">光线</label><select id="director-lighting" value={lighting} onChange={(event) => setLighting(event.target.value)}><option>电影逆光</option><option>柔光</option><option>硬质侧光</option><option>环境自然光</option></select></div>
         </div>
         <div className="inspector-section">
           <h3>情绪</h3>
-          <div className="director-chip-row"><span className="director-chip is-active">紧张</span><span className="director-chip">压迫</span><span className="director-chip">危机</span></div>
-          <div className="inspector-field"><label>执行提示词</label><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} /></div>
+          <div className="director-chip-row">{EMOTIONS.map((emotion) => <button key={emotion} type="button" className={`director-chip${emotions.includes(emotion) ? " is-active" : ""}`} onClick={() => toggleEmotion(emotion)}>{emotion}</button>)}</div>
+          <div className="inspector-field"><label htmlFor="director-prompt">执行提示词</label><textarea id="director-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} /></div>
+          <button type="button" className="studio-primary-button" disabled={!selectedAsset || savingDirector} onClick={() => void saveDirectorSettings()}><SaveOutlined /> {savingDirector ? "正在保存…" : "保存导演参数"}</button>
         </div>
         <div className="inspector-section">
           <h3><SafetyCertificateOutlined /> QC 提示</h3>

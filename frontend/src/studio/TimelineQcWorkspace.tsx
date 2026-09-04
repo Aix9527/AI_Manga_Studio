@@ -18,9 +18,11 @@ const TimelineQcWorkspace: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const projectId = snapshot?.project_id || useWorkspaceStore.getState().projectId || "default";
   const jobStore = useJobStore();
+  const actions = jobStoreActions();
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -61,6 +63,74 @@ const TimelineQcWorkspace: React.FC = () => {
   const qcPassed = assets.filter((asset) => asset.quality_status === "passed" || asset.quality_status === "pass").length;
   const qcFailed = assets.filter((asset) => asset.quality_status === "failed" || asset.quality_status === "fail").length;
   const qcPending = Math.max(0, assets.length - qcPassed - qcFailed);
+  const exportAsset = assets.find((asset) => (
+    asset.active
+    && asset.stage_key === "export"
+    && (asset.kind.includes("video") || asset.kind.includes("composition"))
+  )) ?? null;
+  const exportJob = jobs.find((job) => job.current_stage === "export" || job.current_stage === "compose") ?? null;
+
+  const exportLabel = (() => {
+    if (exportAsset) return "下载成片";
+    if (exportJob?.status === "retry_wait" || exportJob?.status === "failed" || exportJob?.status === "paused") return "恢复导出";
+    if (exportJob?.status === "queued" || exportJob?.status === "running") return "导出进行中";
+    if (exportJob?.status === "waiting_review") return "等待审核";
+    return "导出成片";
+  })();
+
+  const exportDisabled = Boolean(
+    exportBusy
+    || qcFailed > 0
+    || (!exportAsset && !exportJob)
+    || (!exportAsset && exportJob?.status === "queued")
+    || (!exportAsset && exportJob?.status === "running")
+    || (!exportAsset && exportJob?.status === "waiting_review")
+    || (!exportAsset && exportJob?.status === "completed"),
+  );
+
+  const exportReason = (() => {
+    if (qcFailed > 0) return "存在未通过 QC 的资产，必须修复后才能导出。";
+    if (exportAsset) return "QC 已通过，可下载当前激活导出版本。";
+    if (!exportJob) return "当前没有可恢复的 compose/export 任务；一键生产会在前置阶段完成后自动进入导出。";
+    if (exportJob.status === "queued" || exportJob.status === "running") return "compose/export 任务正在运行，无需重复提交。";
+    if (exportJob.status === "waiting_review") return "当前生产任务正在等待审核，时间线不会自动绕过审核门禁。";
+    if (exportJob.status === "completed") return "导出任务已完成，等待导出资产同步。";
+    return "恢复现有 compose/export 任务，不会创建重复的全流程 Job。";
+  })();
+
+  const downloadAsset = (asset: ProjectAsset) => {
+    const anchor = document.createElement("a");
+    anchor.href = asset.media_url;
+    anchor.download = asset.path.split(/[\\/]/).pop() || "export.mp4";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  };
+
+  const handleExport = async () => {
+    if (exportDisabled) return;
+    if (exportAsset) {
+      downloadAsset(exportAsset);
+      setMessage("已请求下载当前激活成片版本");
+      return;
+    }
+    if (!exportJob) return;
+    setExportBusy(true);
+    try {
+      if (exportJob.status === "paused") {
+        await actions.resumeJob(exportJob.id);
+      } else if (exportJob.status === "failed" || exportJob.status === "retry_wait") {
+        await actions.retryJob(exportJob.id);
+      } else {
+        return;
+      }
+      setMessage(`已恢复导出任务 · ${exportJob.id.slice(0, 8)}`);
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   return (
     <div className="studio-workspace timeline-workspace">
@@ -121,8 +191,8 @@ const TimelineQcWorkspace: React.FC = () => {
                 <div className="task-card__title"><strong>{job.current_shot || job.current_stage || job.id.slice(0, 8)}</strong><span className={`status-chip status-chip--${job.status}`}>{job.status}</span></div>
                 <p>{job.message || "需要处理的生产任务"}</p>
                 <div className="task-card__actions">
-                  {job.status === "failed" || job.status === "retry_wait" ? <button type="button" onClick={() => void jobStoreActions().retryJob(job.id)}><ReloadOutlined /> 重试</button> : null}
-                  {job.status === "waiting_review" ? <button type="button" onClick={() => void jobStoreActions().reviewJob(job.id, "approve", "在统一时间线工作区批准")}>批准</button> : null}
+                  {job.status === "failed" || job.status === "retry_wait" ? <button type="button" onClick={() => void actions.retryJob(job.id)}><ReloadOutlined /> 重试</button> : null}
+                  {job.status === "waiting_review" ? <button type="button" onClick={() => void actions.reviewJob(job.id, "approve", "在统一时间线工作区批准")}>批准</button> : null}
                 </div>
               </article>
             ))}
@@ -131,10 +201,11 @@ const TimelineQcWorkspace: React.FC = () => {
 
         <section className="studio-panel export-box">
           <strong><ExportOutlined /> 版本与导出</strong>
-          <p>输出继续使用本地 FFmpeg 合成链；完成 QC 后导出当前激活版本。</p>
+          <p>输出继续使用本地 FFmpeg 合成链；统一时间线只恢复既有 compose/export Job，不会绕过 QC，也不会重复创建整条生产链。</p>
           <div className="inspector-field"><label>分辨率</label><select defaultValue="1080x1920"><option>1080x1920 · 9:16</option><option>1920x1080 · 16:9</option></select></div>
           <div className="inspector-field"><label>帧率</label><select defaultValue="24"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30">30 fps</option></select></div>
-          <button type="button" className="studio-primary-button" onClick={() => setMessage("导出请求将由现有 compose/export 阶段处理；当前工作区不会绕过 QC Gate。")}>导出成片</button>
+          <p className="subtle">{exportReason}</p>
+          <button type="button" className="studio-primary-button" disabled={exportDisabled} onClick={() => void handleExport()}>{exportBusy ? "正在恢复…" : exportLabel}</button>
         </section>
       </aside>
     </div>

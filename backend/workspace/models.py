@@ -26,6 +26,17 @@ class StageAutomation(BaseModel):
     provider_settings: dict[str, object] = Field(default_factory=dict)
 
 
+class DirectorSettings(BaseModel):
+    composition: str = "三分构图"
+    shot_size: str = "中近景"
+    camera_movement: str = "推镜"
+    movement_strength: int = Field(65, ge=0, le=100)
+    focal_length: str = "35mm"
+    lighting: str = "电影逆光"
+    emotion: list[str] = Field(default_factory=list)
+    prompt: str = ""
+
+
 class StageSummary(BaseModel):
     stage_key: StageKey
     status: str = "pending"

@@ -1,6 +1,5 @@
 import React from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { workspaceApi } from "@/api/workspace";
@@ -10,7 +9,7 @@ import type { ProjectAsset } from "@/workbench/types";
 
 vi.mock("@/state/jobStore", () => ({
   useJobStore: () => ({ jobs: new Map(), recentIds: [] }),
-  jobStoreActions: () => ({ retryJob: vi.fn(), reviewJob: vi.fn() }),
+  jobStoreActions: () => ({ retryJob: vi.fn(), resumeJob: vi.fn(), reviewJob: vi.fn() }),
 }));
 
 function asset(overrides: Partial<ProjectAsset> = {}): ProjectAsset {
@@ -63,8 +62,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("时间线质检工作台", () => {
-  it("使用真实资产构建时间线、QC 汇总与媒体预览，并保留 QC 后导出入口", async () => {
-    const user = userEvent.setup();
+  it("使用真实资产构建时间线、QC 汇总与媒体预览，并在 QC 失败时闭锁导出", async () => {
     vi.spyOn(workspaceApi, "listAssets").mockResolvedValue([
       asset(),
       asset({ id: 2, kind: "image", media_url: "/api/workspace/gui-xu/assets/2/media", shot_id: "shot_02", quality_status: "failed" }),
@@ -82,7 +80,7 @@ describe("时间线质检工作台", () => {
     expect(screen.getByText("待检测").parentElement).toHaveTextContent("1");
     expect(document.querySelector("video")).toHaveAttribute("src", "/api/workspace/gui-xu/assets/1/media");
 
-    await user.click(screen.getByRole("button", { name: "导出成片" }));
-    expect(screen.getByRole("status")).toHaveTextContent("当前工作区不会绕过 QC Gate");
+    expect(screen.getByRole("button", { name: "导出成片" })).toBeDisabled();
+    expect(screen.getByText(/存在未通过 QC 的资产/)).toBeInTheDocument();
   });
 });

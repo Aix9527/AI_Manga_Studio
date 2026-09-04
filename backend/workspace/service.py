@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from backend.migration.scanner import ProjectScanner, ScannedProject
@@ -9,7 +10,14 @@ from backend.orchestration.repository import ReviewJobNotFound, ReviewTransition
 from backend.orchestration.service import JobService
 from backend.orchestration.schemas import JobDetail
 from backend.orchestration.worker import SSEBroadcaster
-from backend.workspace.models import ProjectAsset, StageAutomation, StageKey, StageSummary, WorkspaceSnapshot
+from backend.workspace.models import (
+    DirectorSettings,
+    ProjectAsset,
+    StageAutomation,
+    StageKey,
+    StageSummary,
+    WorkspaceSnapshot,
+)
 from backend.workspace.repository import WorkspaceRepository
 
 
@@ -106,6 +114,108 @@ class WorkspaceService:
             quality_status=quality_status,
             active=active,
         )
+
+    def update_director_settings(
+        self,
+        project_id: str,
+        asset_id: int,
+        value: DirectorSettings,
+    ) -> ProjectAsset:
+        current = self.repo.get_project_asset(project_id, asset_id)
+        if current is None:
+            raise AssetNotFound
+
+        director = value.model_dump(mode="json")
+        if current.shot_id:
+            self._sync_director_to_production_plan(project_id, current.shot_id, director)
+
+        asset = self.repo.update_project_asset_director(project_id, asset_id, director)
+        if asset is None:
+            raise AssetNotFound
+        return asset
+
+    def _sync_director_to_production_plan(
+        self,
+        project_id: str,
+        shot_id: str,
+        director: dict[str, object],
+    ) -> None:
+        project_root = (self.projects_root / project_id).resolve()
+        projects_root = self.projects_root.resolve()
+        try:
+            project_root.relative_to(projects_root)
+        except ValueError:
+            raise DirectorRuntimeSyncError("项目路径越界")
+
+        plan_path = project_root / "production_plan.json"
+        if not plan_path.is_file():
+            return
+
+        try:
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise DirectorRuntimeSyncError("production_plan.json 无法读取") from error
+
+        shots = plan.get("shots")
+        if not isinstance(shots, list):
+            raise DirectorRuntimeSyncError("production_plan.json 缺少 shots")
+
+        target = next((shot for shot in shots if isinstance(shot, dict) and shot.get("id") == shot_id), None)
+        if target is None:
+            return
+
+        base_prompt = str(
+            target.get("director_base_positive_prompt")
+            or target.get("positive_prompt")
+            or ""
+        ).strip()
+        target["director_base_positive_prompt"] = base_prompt
+        target["director"] = director
+
+        movement_strength = int(director.get("movement_strength", 65) or 0)
+        motion_level = _director_motion_level(movement_strength)
+        motion_bucket_id = _MOTION_BUCKET_BY_LEVEL[motion_level]
+        camera_movement = str(director.get("camera_movement") or "").strip()
+        emotions = [str(item).strip() for item in director.get("emotion", []) if str(item).strip()]
+
+        target["camera_movement"] = camera_movement
+        target["camera"] = camera_movement
+        target["motion_level"] = motion_level
+        target["motion_bucket_id"] = motion_bucket_id
+        target["director_composition"] = str(director.get("composition") or "")
+        target["director_shot_size"] = str(director.get("shot_size") or "")
+        target["director_focal_length"] = str(director.get("focal_length") or "")
+        target["director_lighting"] = str(director.get("lighting") or "")
+        target["director_emotion"] = emotions
+
+        clauses = [
+            f"构图：{target['director_composition']}" if target["director_composition"] else "",
+            f"景别：{target['director_shot_size']}" if target["director_shot_size"] else "",
+            f"运镜：{camera_movement}" if camera_movement else "",
+            f"焦段：{target['director_focal_length']}" if target["director_focal_length"] else "",
+            f"光线：{target['director_lighting']}" if target["director_lighting"] else "",
+            f"情绪：{'、'.join(emotions)}" if emotions else "",
+            str(director.get("prompt") or "").strip(),
+        ]
+        director_clause = "，".join(part for part in clauses if part)
+        target["positive_prompt"] = (
+            f"{base_prompt}。导演控制：{director_clause}" if base_prompt and director_clause
+            else director_clause or base_prompt
+        )
+
+        tmp_path = plan_path.with_suffix(".json.tmp")
+        try:
+            tmp_path.write_text(
+                json.dumps(plan, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            tmp_path.replace(plan_path)
+        except OSError as error:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise DirectorRuntimeSyncError("production_plan.json 写入失败") from error
 
     def get_asset_media(self, project_id: str, asset_id: int) -> tuple[Path, str] | None:
         stored_path = self.repo.get_project_asset_stored_path(project_id, asset_id)
@@ -233,6 +343,27 @@ class AssetNotReviewable(Exception):
 class JobServiceUnavailable(Exception):
     pass
 
+
+class DirectorRuntimeSyncError(Exception):
+    pass
+
+
+def _director_motion_level(strength: int) -> int:
+    value = max(0, min(100, int(strength)))
+    if value <= 10:
+        return 0
+    if value <= 30:
+        return 1
+    if value <= 50:
+        return 2
+    if value <= 70:
+        return 3
+    if value <= 85:
+        return 4
+    return 5
+
+
+_MOTION_BUCKET_BY_LEVEL = {0: 40, 1: 60, 2: 105, 3: 140, 4: 175, 5: 195}
 
 _MEDIA_TYPES = {
     ".png": "image/png",
