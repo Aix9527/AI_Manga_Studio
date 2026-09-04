@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectCockpit from "@/studio/ProjectCockpit";
 import { api } from "@/api/jobs";
 
-const { workspaceState, actions, parseStory, extractFromText } = vi.hoisted(() => ({
+const { workspaceState, actions, parseStory, extractFromText, getPublishedProductionTemplate } = vi.hoisted(() => ({
   workspaceState: {
     projectId: "project-a",
     snapshot: {
@@ -30,6 +30,7 @@ const { workspaceState, actions, parseStory, extractFromText } = vi.hoisted(() =
   },
   parseStory: vi.fn(),
   extractFromText: vi.fn(),
+  getPublishedProductionTemplate: vi.fn(),
 }));
 
 vi.mock("@/state/workspaceStore", () => ({
@@ -64,6 +65,8 @@ vi.mock("@/api/jobs", () => ({
   },
 }));
 
+vi.mock("@/api/productionTemplates", () => ({ getPublishedProductionTemplate }));
+
 describe("ProjectCockpit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,6 +77,11 @@ describe("ProjectCockpit", () => {
     actions.createJob.mockResolvedValue({ id: "job-12345678" });
     parseStory.mockResolvedValue(undefined);
     extractFromText.mockResolvedValue(undefined);
+    getPublishedProductionTemplate.mockResolvedValue({
+      project_id: "project-a",
+      published: false,
+      template: null,
+    });
   });
 
   afterEach(cleanup);
