@@ -231,6 +231,36 @@ class WorkspaceRepository:
             ).fetchone()
         return self._asset_from_row(row) if row else None
 
+    def update_project_asset_director(
+        self,
+        project_id: str,
+        asset_id: int,
+        director: dict[str, object],
+    ) -> ProjectAsset | None:
+        with self.db.transaction(immediate=True) as conn:
+            row = conn.execute(
+                "SELECT * FROM artifacts WHERE project_id=? AND id=?",
+                (project_id, asset_id),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                metadata = json.loads(row["metadata"] or "{}")
+                if not isinstance(metadata, dict):
+                    metadata = {}
+            except (TypeError, json.JSONDecodeError):
+                metadata = {}
+            metadata["director"] = director
+            conn.execute(
+                "UPDATE artifacts SET metadata=? WHERE project_id=? AND id=?",
+                (json.dumps(metadata, ensure_ascii=False), project_id, asset_id),
+            )
+            updated = conn.execute(
+                "SELECT * FROM artifacts WHERE project_id=? AND id=?",
+                (project_id, asset_id),
+            ).fetchone()
+        return self._asset_from_row(updated) if updated else None
+
     def get_project_asset_stored_path(self, project_id: str, asset_id: int) -> str | None:
         with self.db.connect() as conn:
             row = conn.execute(
