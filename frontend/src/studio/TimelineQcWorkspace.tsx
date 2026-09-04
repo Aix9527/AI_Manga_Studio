@@ -81,6 +81,7 @@ const TimelineQcWorkspace: React.FC = () => {
   const exportDisabled = Boolean(
     exportBusy
     || qcFailed > 0
+    || qcPending > 0
     || (!exportAsset && !exportJob)
     || (!exportAsset && exportJob?.status === "queued")
     || (!exportAsset && exportJob?.status === "running")
@@ -90,6 +91,7 @@ const TimelineQcWorkspace: React.FC = () => {
 
   const exportReason = (() => {
     if (qcFailed > 0) return "存在未通过 QC 的资产，必须修复后才能导出。";
+    if (qcPending > 0) return "仍有未完成 QC 的资产，全部通过后才能导出。";
     if (exportAsset) return "QC 已通过，可下载当前激活导出版本。";
     if (!exportJob) return "当前没有可恢复的 compose/export 任务；一键生产会在前置阶段完成后自动进入导出。";
     if (exportJob.status === "queued" || exportJob.status === "running") return "compose/export 任务正在运行，无需重复提交。";
