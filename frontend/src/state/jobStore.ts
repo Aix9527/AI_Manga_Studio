@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 import { api } from "@/api/jobs";
 import { refreshWorkspaceSnapshot } from "@/state/workspaceStore";
-import type { JobCreateRequest, JobDetail, ReviewRequest } from "@/types/jobs";
+import type { JobCreateRequest, JobDetail, ReviewRequest, StageExecutionRequest } from "@/types/jobs";
 
 interface JobStoreSnapshot {
   jobs: Map<string, JobDetail>;
@@ -55,6 +55,8 @@ const SSE_EVENT_NAMES = [
   "review_needed",
   "reviewed",
   "automation_changed",
+  "stage_execution_requested",
+  "stage_execution_paused",
   "job_completed",
   "job_failed",
   "paused",
@@ -319,6 +321,8 @@ const actions = {
   resumeJob: (jobId: string) => updateJob(() => api.resumeJob(jobId)),
   retryJob: (jobId: string, stepId?: string) =>
     updateJob(() => api.retryJob(jobId, { step_id: stepId })),
+  executeFromStage: (jobId: string, request: StageExecutionRequest) =>
+    updateJob(() => api.executeFromStage(jobId, request)),
   cancelJob: (jobId: string) => updateJob(() => api.cancelJob(jobId)),
   reviewJob: (
     jobId: string,
