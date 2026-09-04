@@ -226,7 +226,7 @@ class JobService:
             conn.execute(
                 """UPDATE jobs
                    SET status=?, desired_state=?, current_stage=?, current_shot=?,
-                       message=?, final_video='', finished_at=NULL,
+                       progress=0.0, message=?, final_video='', finished_at=NULL,
                        lease_id=NULL, lease_expires_at=NULL, updated_at=datetime('now')
                    WHERE id=?""",
                 (
