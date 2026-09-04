@@ -23,6 +23,8 @@ from backend.orchestration.service import (
     StageExecutionConflict,
     StageExecutionTargetNotFound,
 )
+from backend.orchestration.template_resolution import resolve_project_template_job_create
+from backend.workspace.template_service import TemplatePublishConflict
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -36,8 +38,20 @@ def get_service(request: Request) -> JobService:
 
 @router.post("", response_model=JobDetail, status_code=201)
 async def create_job(data: JobCreate, request: Request) -> JobDetail:
-    result = get_service(request).create(data)
-    return result
+    service = get_service(request)
+    try:
+        resolved = resolve_project_template_job_create(service.db, data)
+    except TemplatePublishConflict as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": error.code, "message": str(error)},
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "TEMPLATE_PUBLISH_CONFLICT", "message": str(error)},
+        ) from error
+    return service.create(resolved)
 
 
 @router.get("", response_model=JobListResponse)
