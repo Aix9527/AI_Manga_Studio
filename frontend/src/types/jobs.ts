@@ -104,6 +104,14 @@ export interface ReviewRequest {
   patch?: Record<string, unknown>;
 }
 
+export type StageExecutionMode = "rerun_node" | "continue";
+
+export interface StageExecutionRequest {
+  stage_key: string;
+  shot_id?: string;
+  mode: StageExecutionMode;
+}
+
 export interface RollbackPreview {
   step_id: string;
   invalidated_step_ids: string[];

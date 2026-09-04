@@ -64,6 +64,15 @@ class ReviewRequest(BaseModel):
     patch: dict[str, Any] = Field(default_factory=dict)
 
 
+StageExecutionMode = Literal["rerun_node", "continue"]
+
+
+class StageExecutionRequest(BaseModel):
+    stage_key: str = Field(min_length=1)
+    shot_id: str = ""
+    mode: StageExecutionMode
+
+
 class RollbackPreview(BaseModel):
     step_id: str
     invalidated_step_ids: list[str]
