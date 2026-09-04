@@ -8,6 +8,17 @@ import type {
   WorkspaceSnapshot,
 } from "@/workbench/types";
 
+export interface DirectorSettingsPayload {
+  composition: string;
+  shot_size: string;
+  camera_movement: string;
+  movement_strength: number;
+  focal_length: string;
+  lighting: string;
+  emotion: string[];
+  prompt: string;
+}
+
 export const workspaceApi = {
   getSnapshot: (projectId: string) =>
     request<WorkspaceSnapshot>(`/workspace/${encodeURIComponent(projectId)}`),
@@ -35,6 +46,19 @@ export const workspaceApi = {
       `/workspace/${encodeURIComponent(projectId)}/assets${suffix}`,
     );
   },
+
+  updateDirectorSettings: (
+    projectId: string,
+    assetId: number,
+    value: DirectorSettingsPayload,
+  ) =>
+    request<ProjectAsset>(
+      `/workspace/${encodeURIComponent(projectId)}/assets/${assetId}/director`,
+      {
+        method: "PUT",
+        body: JSON.stringify(value),
+      },
+    ),
 
   regenerateAsset: (projectId: string, assetId: number) =>
     request<JobDetail>(
