@@ -12,7 +12,7 @@ from backend.orchestration.schemas import (
     JobSettings,
     StageExecutionRequest,
 )
-from backend.orchestration.service import JobService
+from backend.orchestration.service import JobService, StageExecutionConflict
 from backend.orchestration.worker import SSEBroadcaster
 
 
@@ -158,6 +158,41 @@ def test_rerun_node_leaves_downstream_dependencies_invalidated(tmp_path):
     assert current[("audio_sfx", "")]["status"] == StepStatus.INVALIDATED
     assert current[("composition_compose", "")]["status"] == StepStatus.INVALIDATED
     assert current[("export", "")]["status"] == StepStatus.INVALIDATED
+
+
+def test_rerun_node_completion_atomically_pauses_before_worker_can_false_complete(tmp_path):
+    db, repo, service, job_id = _system(tmp_path)
+    _complete_all_steps(db, job_id)
+    _force_job_status(db, job_id, JobStatus.PAUSED)
+
+    service.execute_from_stage(
+        job_id,
+        StageExecutionRequest(
+            stage_key="video_generate",
+            shot_id="shot_001",
+            mode="rerun_node",
+        ),
+    )
+    target = _steps(repo, job_id)[("video_generate", "shot_001")]
+    assert repo.acquire_lease(job_id, "test-worker", 30)
+    assert repo.set_step_status(
+        target["id"],
+        StepStatus.RUNNING,
+        allowed_from={StepStatus.QUEUED},
+    )
+    assert repo.set_step_status(
+        target["id"],
+        StepStatus.COMPLETED,
+        allowed_from={StepStatus.RUNNING},
+    )
+
+    job = repo.get_job(job_id)
+    assert job["status"] == JobStatus.PAUSED
+    assert job["desired_state"] == f"rerun_node_complete:{target['id']}"
+    assert job["lease_id"] is None
+    assert job["lease_expires_at"] is None
+    with pytest.raises(StageExecutionConflict, match="formal stage execution command"):
+        service.resume(job_id)
 
 
 def test_planning_continue_reopens_every_later_stage(tmp_path):
