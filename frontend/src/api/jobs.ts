@@ -6,6 +6,7 @@ import type {
   JobListResponse,
   RetryRequest,
   ReviewRequest,
+  StageExecutionRequest,
   RollbackPreview,
   ScannedProject,
 } from "@/types/jobs";
@@ -34,6 +35,12 @@ export const api = {
 
   retryJob: (jobId: string, body: RetryRequest = {}) =>
     request<JobDetail>(`/jobs/${encodeURIComponent(jobId)}/retry`, { method: "POST", body: JSON.stringify(body) }),
+
+  executeFromStage: (jobId: string, body: StageExecutionRequest) =>
+    request<JobDetail>(`/jobs/${encodeURIComponent(jobId)}/resume-from-stage`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   cancelJob: (jobId: string) =>
     request<JobDetail>(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }),
