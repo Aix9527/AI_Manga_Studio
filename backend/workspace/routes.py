@@ -12,6 +12,7 @@ from backend.workspace.models import (
 from backend.workspace.service import (
     AssetNotFound,
     AssetNotReviewable,
+    DirectorRuntimeSyncError,
     JobServiceUnavailable,
     UnsupportedAssetMedia,
     WorkspaceService,
@@ -75,6 +76,8 @@ async def update_asset_director_settings(
         return _service(request).update_director_settings(project_id, asset_id, value)
     except AssetNotFound as error:
         raise HTTPException(status_code=404, detail="素材不存在") from error
+    except DirectorRuntimeSyncError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.get("/{project_id}/assets/{asset_id}/media", response_class=FileResponse)
