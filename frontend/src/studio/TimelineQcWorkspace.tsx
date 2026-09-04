@@ -82,10 +82,10 @@ const TimelineQcWorkspace: React.FC = () => {
     exportBusy
     || qcFailed > 0
     || (!exportAsset && !exportJob)
-    || exportJob?.status === "queued"
-    || exportJob?.status === "running"
-    || exportJob?.status === "waiting_review"
-    || exportJob?.status === "completed",
+    || (!exportAsset && exportJob?.status === "queued")
+    || (!exportAsset && exportJob?.status === "running")
+    || (!exportAsset && exportJob?.status === "waiting_review")
+    || (!exportAsset && exportJob?.status === "completed"),
   );
 
   const exportReason = (() => {
