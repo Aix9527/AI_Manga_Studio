@@ -101,7 +101,7 @@ describe("StoryboardDirectorWorkspace v0.9 director persistence", () => {
     render(<StoryboardDirectorWorkspace />);
 
     await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
-    expect(screen.getByLabelText("构图")).toHaveValue("中心构图");
+    await waitFor(() => expect(screen.getByLabelText("构图")).toHaveValue("中心构图"));
     expect(screen.getByLabelText("景别")).toHaveValue("特写");
     expect(screen.getByRole("button", { name: "平移" })).toHaveClass("is-active");
     expect(screen.getByLabelText("运动强度")).toHaveValue("35");
