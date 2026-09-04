@@ -8,6 +8,7 @@ from typing import Any
 class VideoProviderPlan:
     providers: tuple[str, ...]
     required: bool = False
+    enforced: bool = False
 
 
 def _stage_provider_policy(settings: dict[str, Any], stage_key: str) -> dict[str, Any]:
@@ -31,7 +32,7 @@ def resolve_video_provider_plan(settings: dict[str, Any]) -> VideoProviderPlan:
     if mode == "required":
         if provider not in {"minimax_h3", "wan"}:
             raise RuntimeError(f"unsupported required video provider: {provider or '<empty>'}")
-        return VideoProviderPlan((provider,), required=True)
+        return VideoProviderPlan((provider,), required=True, enforced=True)
 
     if mode == "preferred" and provider:
         providers = [provider]
@@ -40,10 +41,10 @@ def resolve_video_provider_plan(settings: dict[str, Any]) -> VideoProviderPlan:
         invalid = [name for name in providers if name not in {"minimax_h3", "wan"}]
         if invalid:
             raise RuntimeError(f"unsupported preferred video provider: {invalid[0]}")
-        return VideoProviderPlan(tuple(providers), required=False)
+        return VideoProviderPlan(tuple(providers), required=False, enforced=True)
 
     # Preserve the pre-template orchestration behavior exactly.
-    return VideoProviderPlan(("wan",), required=False)
+    return VideoProviderPlan(("wan",), required=False, enforced=False)
 
 
 def stage_provider_is_required(
