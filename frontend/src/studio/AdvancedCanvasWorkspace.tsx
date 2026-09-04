@@ -165,6 +165,7 @@ const AdvancedCanvasWorkspace: React.FC = () => {
               <h3>{selectedNode.data.label}</h3>
               <p className="subtle">{selectedNode.data.subtitle}</p>
               <p className="subtle">正式阶段：{selectedNode.data.stageKey}</p>
+              <p className="subtle">执行任务：{productionJob ? `${productionJob.id.slice(0, 8)} · ${productionJob.status}` : "未绑定"}</p>
             </div>
             {selectedNode.data.shotScoped ? (
               <div className="inspector-section">
@@ -178,10 +179,12 @@ const AdvancedCanvasWorkspace: React.FC = () => {
               </div>
             ) : null}
             <div className="inspector-section">
-              <div className="inspector-field"><label>执行引擎</label><select defaultValue={selectedNode.data.group === "video" ? "Wan 2.2" : selectedNode.data.group === "audio" ? "CosyVoice" : "FLUX / Local"}><option>Wan 2.2</option><option>MiniMax H3</option><option>FLUX / Local</option><option>CosyVoice</option></select></div>
-              <div className="inspector-field"><label>批次大小</label><input type="number" min="1" max="8" defaultValue="1" /></div>
-              <div className="inspector-field"><label>失败重试</label><select defaultValue="2"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></div>
-              <div className="inspector-field"><label>缓存策略</label><select defaultValue="精确匹配"><option>精确匹配</option><option>允许相似复用</option><option>禁用缓存</option></select></div>
+              <h3>执行参数来源</h3>
+              <div className="inspector-field"><label>执行引擎</label><input value="继承正式 Job / Provider 路由" readOnly disabled /></div>
+              <div className="inspector-field"><label>批次大小</label><input value="继承 Job 设置" readOnly disabled /></div>
+              <div className="inspector-field"><label>失败重试</label><input value="继承编排器重试策略" readOnly disabled /></div>
+              <div className="inspector-field"><label>缓存策略</label><input value="继承正式运行时策略" readOnly disabled /></div>
+              <p className="subtle">这些参数不会在画布里临时覆盖正式 Job，因此选择节点执行不会静默改变 Wan / H3 / FLUX / CosyVoice 路由。</p>
             </div>
             <div className="inspector-section">
               <h3>节点可观察性</h3>
