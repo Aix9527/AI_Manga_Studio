@@ -11,6 +11,7 @@ from backend.orchestration.enums import JobStatus, JobCommand
 
 class JobOptions(BaseModel):
     style: str = "anime"
+    local_first: bool = True
     chapter: int | None = None
     max_shots: int = 30
     tts_enabled: bool = True
@@ -30,6 +31,8 @@ class JobSettings(BaseModel):
     fps: int = 24
     shot_duration: float = 5.0
     options: JobOptions = Field(default_factory=JobOptions)
+    stage_policy: list[dict[str, Any]] = Field(default_factory=list)
+    template: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobCreate(BaseModel):
