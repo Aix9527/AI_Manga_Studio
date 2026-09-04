@@ -196,6 +196,34 @@ class OrchestrationDatabase:
             updated_at TEXT NOT NULL,
             PRIMARY KEY (project_id, stage_key)
         );
+
+        CREATE TABLE IF NOT EXISTS project_production_templates (
+            project_id TEXT PRIMARY KEY,
+            published_version_id TEXT,
+            latest_version INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS project_production_template_versions (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            name TEXT NOT NULL DEFAULT '',
+            schema_version INTEGER NOT NULL,
+            content_json TEXT NOT NULL,
+            content_sha256 TEXT NOT NULL,
+            compiled_json TEXT NOT NULL,
+            compiled_sha256 TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            published_at TEXT,
+            UNIQUE(project_id, version)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_project_template_versions
+            ON project_production_template_versions(project_id, version DESC);
+        CREATE INDEX IF NOT EXISTS idx_project_template_status
+            ON project_production_template_versions(project_id, status, version DESC);
         """
 
     @contextmanager

@@ -23,6 +23,10 @@ from backend.orchestration.config import OrchestrationConfig
 from backend.orchestration.database import OrchestrationDatabase
 from backend.orchestration.enums import JobStatus, StepStatus, JOB_TERMINAL
 from backend.orchestration.repository import JobRepository
+from backend.orchestration.template_provider_policy import (
+    resolve_video_provider_plan,
+    stage_provider_is_required,
+)
 from backend.workspace.models import StageAutomation, StageKey
 from backend.workspace.repository import WorkspaceRepository
 
@@ -407,6 +411,7 @@ class StageExecutor:
         shot_id = step.get("shot_id", "")
         stage_key = step["stage_key"]
         step_id = step["id"]
+        strict_flux = stage_provider_is_required(settings, stage_key, "flux")
 
         # Skip if shot doesn't exist in plan
         if project_id and not self._shot_exists_in_plan(shot_id, project_id):
@@ -426,10 +431,10 @@ class StageExecutor:
 
         comfy = await self._get_comfy()
         if not await comfy.is_available():
-            self.repo.set_job_progress(
-                job_id, stage_key, shot_id, 0.35,
-                f"ComfyUI not available at {self.comfy_url}, skipping {shot_id}",
-            )
+            message = f"ComfyUI not available at {self.comfy_url} for {shot_id}"
+            self.repo.set_job_progress(job_id, stage_key, shot_id, 0.35, message)
+            if strict_flux:
+                raise RuntimeError(message)
             _create_placeholder_image(output_path)
             self._register_artifact(job_id, step_id, "image", str(output_path), shot_id)
             return
@@ -552,6 +557,8 @@ class StageExecutor:
                 job_id, stage_key, shot_id, 0.35,
                 f"Image generation failed for {shot_id}: {e}",
             )
+            if strict_flux:
+                raise
             _create_placeholder_image(output_path)
             self._register_artifact(job_id, step_id, "image", str(output_path), shot_id)
 
@@ -628,6 +635,7 @@ class StageExecutor:
         shot_id = step.get("shot_id", "")
         stage_key = step["stage_key"]
         step_id = step["id"]
+        provider_plan = resolve_video_provider_plan(settings)
 
         # Skip if shot doesn't exist in plan
         if project_id and not self._shot_exists_in_plan(shot_id, project_id):
@@ -668,10 +676,10 @@ class StageExecutor:
 
         comfy = await self._get_comfy()
         if not await comfy.is_available():
-            self.repo.set_job_progress(
-                job_id, stage_key, shot_id, 0.45,
-                f"ComfyUI not available, skipping AI video for {shot_id}",
-            )
+            message = f"ComfyUI not available for AI video {shot_id}"
+            self.repo.set_job_progress(job_id, stage_key, shot_id, 0.45, message)
+            if provider_plan.enforced:
+                raise RuntimeError(message)
             return
 
         try:
@@ -679,19 +687,20 @@ class StageExecutor:
             from backend.production.workflow_templates import WorkflowTemplate
             from backend.production.comfy_video import WanVideoProvider
 
-            # Load Wan2.2 workflow via the central registry.
-            from backend.production.workflow_registry import select_wan_video_workflow
-            workflow_spec = select_wan_video_workflow(has_end_frame=bool(end_frame_path))
-            workflow_name = workflow_spec.path.name
-            workflow_path = workflow_spec.path
-            if not workflow_path.exists():
-                self.repo.set_job_progress(
-                    job_id, stage_key, shot_id, 0.45,
-                    f"Wan2.2 workflow {workflow_name} not found, skipping AI video",
-                )
-                return
-
-            template = WorkflowTemplate.load(workflow_path)
+            wan_template = None
+            if "wan" in provider_plan.providers:
+                from backend.production.workflow_registry import select_wan_video_workflow
+                workflow_spec = select_wan_video_workflow(has_end_frame=bool(end_frame_path))
+                workflow_name = workflow_spec.path.name
+                workflow_path = workflow_spec.path
+                if workflow_path.exists():
+                    wan_template = WorkflowTemplate.load(workflow_path)
+                elif provider_plan.providers == ("wan",):
+                    message = f"Wan2.2 workflow {workflow_name} not found"
+                    self.repo.set_job_progress(job_id, stage_key, shot_id, 0.45, message)
+                    if provider_plan.enforced:
+                        raise RuntimeError(message)
+                    return
 
             # Load plan to get shot prompt
             plan_path = Path(self.config.project_root) / (project_id or "default") / "production_plan.json"
@@ -740,23 +749,48 @@ class StageExecutor:
             video_fps = settings.get("fps", 24)
             denoise_strength = profile.denoise if profile else 0.55
 
-            provider = WanVideoProvider(adapter=comfy, template=template)
-            request = VideoRequest(
-                image_path=image_path,
-                prompt=shot_prompt,
-                negative_prompt=shot_negative,
-                seed=shot_seed,
-                width=gen_width,
-                height=gen_height,
-                frames=video_frames,
-                fps=video_fps,
-                output_path=output_path,
-                motion_bucket_id=motion_bucket_id,
-                denoise_strength=denoise_strength,
-                ai_video=True,
-                end_frame_path=end_frame_path,  # FLF2V: pass last frame for interpolation
-            )
-            await provider.generate(request)
+            last_provider_error = None
+            for provider_name in provider_plan.providers:
+                try:
+                    if provider_name == "minimax_h3":
+                        from backend.production.minimax_h3_adapter import MiniMaxH3VideoProvider
+                        provider = MiniMaxH3VideoProvider(adapter=comfy)
+                    elif provider_name == "wan":
+                        if wan_template is None:
+                            raise RuntimeError("Wan2.2 workflow is unavailable")
+                        provider = WanVideoProvider(adapter=comfy, template=wan_template)
+                    else:
+                        raise RuntimeError(f"Unsupported video provider: {provider_name}")
+
+                    request = VideoRequest(
+                        image_path=image_path,
+                        prompt=shot_prompt,
+                        negative_prompt=shot_negative,
+                        seed=shot_seed,
+                        width=gen_width,
+                        height=gen_height,
+                        frames=video_frames,
+                        fps=video_fps,
+                        output_path=output_path,
+                        motion_bucket_id=motion_bucket_id,
+                        denoise_strength=denoise_strength,
+                        ai_video=True,
+                        end_frame_path=end_frame_path,
+                        engine=provider_name,
+                    )
+                    await provider.generate(request)
+                    last_provider_error = None
+                    break
+                except Exception as provider_error:
+                    last_provider_error = provider_error
+                    if provider_plan.required:
+                        raise
+                    logger.warning(
+                        "Video provider %s failed for %s; trying explicit fallback if configured: %s",
+                        provider_name, shot_id, provider_error,
+                    )
+            if last_provider_error is not None:
+                raise last_provider_error
 
             # GPT P0: Video Contract 硬门禁 —— 不合格视频禁止进入下游
             try:
@@ -780,6 +814,8 @@ class StageExecutor:
                 job_id, stage_key, shot_id, 0.45,
                 f"AI video generation failed for {shot_id}: {e}",
             )
+            if provider_plan.enforced:
+                raise
 
     async def _run_audio_stage(self, job_id: str, step: dict, output_dir: Path, project_id: str = "") -> None:
         stage_key = step["stage_key"]

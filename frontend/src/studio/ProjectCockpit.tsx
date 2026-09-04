@@ -8,16 +8,18 @@ import {
   VideoCameraOutlined,
 } from "@ant-design/icons";
 
-import { api } from "@/api/jobs";
 import { userMessage } from "@/api/client";
+import { api } from "@/api/jobs";
+import { getPublishedProductionTemplate } from "@/api/productionTemplates";
 import { useCharacterStore } from "@/state/characterStore";
 import { jobStoreActions, useJobStore } from "@/state/jobStore";
 import { useStoryStore } from "@/state/storyStore";
 import { useWorkspaceStore } from "@/state/workspaceStore";
-import type { StageKey } from "@/workbench/types";
 import LocalStatusStrip from "@/studio/components/LocalStatusStrip";
 import PipelineStep from "@/studio/components/PipelineStep";
 import TaskQueuePanel from "@/studio/components/TaskQueuePanel";
+import type { CompiledProductionTemplate, PublishedProductionTemplate } from "@/types/productionTemplates";
+import type { StageKey } from "@/workbench/types";
 
 const STAGE_GROUPS: Array<{ title: string; description: string; keys: StageKey[]; icon: React.ReactNode }> = [
   { title: "导入小说/剧本", description: "TXT / Markdown / Fountain，本地读取与解析", keys: ["import"], icon: <FileTextOutlined /> },
@@ -27,6 +29,14 @@ const STAGE_GROUPS: Array<{ title: string; description: string; keys: StageKey[]
   { title: "配音与字幕", description: "CosyVoice / TTS、字幕与音频轨道", keys: ["audio"], icon: <AudioOutlined /> },
   { title: "质检与导出", description: "合成、QC 门禁、版本化成片导出", keys: ["compose", "export"], icon: <SafetyCertificateOutlined /> },
 ];
+
+const SYSTEM_DEFAULT_PRODUCTION = {
+  shot_duration: 5,
+  width: 1080,
+  height: 1920,
+  fps: 24,
+  options: { style: "anime", local_first: true },
+};
 
 function stageStatus(snapshot: ReturnType<typeof useWorkspaceStore.getState>["snapshot"], keys: StageKey[]) {
   if (!snapshot) return { status: "waiting" as const, progress: 0 };
@@ -42,6 +52,42 @@ function currentWorkspaceProjectId(): string | null {
   return state.snapshot?.project_id ?? state.projectId;
 }
 
+function resolveProductionSettings(value: PublishedProductionTemplate) {
+  if (!value.published || !value.template) return SYSTEM_DEFAULT_PRODUCTION;
+
+  let compiled: CompiledProductionTemplate;
+  try {
+    compiled = JSON.parse(value.template.compiled_json) as CompiledProductionTemplate;
+  } catch {
+    throw new Error("TEMPLATE_PUBLISH_CONFLICT: published template compiled policy is invalid");
+  }
+
+  const production = compiled.production;
+  if (
+    !production
+    || typeof production.shot_duration !== "number"
+    || typeof production.width !== "number"
+    || typeof production.height !== "number"
+    || typeof production.fps !== "number"
+    || !production.options
+    || typeof production.options.style !== "string"
+    || typeof production.options.local_first !== "boolean"
+  ) {
+    throw new Error("TEMPLATE_PUBLISH_CONFLICT: published template production settings are incomplete");
+  }
+
+  return {
+    shot_duration: production.shot_duration,
+    width: production.width,
+    height: production.height,
+    fps: production.fps,
+    options: {
+      style: production.options.style,
+      local_first: production.options.local_first,
+    },
+  };
+}
+
 const ProjectCockpit: React.FC = () => {
   const snapshot = useWorkspaceStore((state) => state.snapshot);
   const workspaceProjectId = useWorkspaceStore((state) => state.projectId);
@@ -52,6 +98,7 @@ const ProjectCockpit: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [healthText, setHealthText] = useState<string>("");
+  const [publishedTemplate, setPublishedTemplate] = useState<PublishedProductionTemplate | null>(null);
   const oneClickRequest = useRef(0);
   const projectId = snapshot?.project_id || workspaceProjectId || "default";
 
@@ -60,6 +107,22 @@ const ProjectCockpit: React.FC = () => {
     setUploadedPath(null);
     setBusy(false);
     setMessage(null);
+    setPublishedTemplate(null);
+
+    let active = true;
+    void getPublishedProductionTemplate(projectId)
+      .then((value) => {
+        if (!active) return;
+        setPublishedTemplate(value);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setMessage(userMessage(error));
+      });
+
+    return () => {
+      active = false;
+    };
   }, [projectId]);
 
   const recentArtifacts = useMemo(() => jobStore.recentIds
@@ -107,15 +170,17 @@ const ProjectCockpit: React.FC = () => {
     try {
       const inputPath = await prepareInput(requestProjectId, isCurrentRequest);
       if (!inputPath || !isCurrentRequest()) return;
+
+      const template = await getPublishedProductionTemplate(requestProjectId);
+      if (!isCurrentRequest()) return;
+      setPublishedTemplate(template);
+      const production = resolveProductionSettings(template);
+
       const job = await jobStoreActions().createJob({
         project_id: requestProjectId,
         input_path: inputPath,
         mode: "automatic",
-        shot_duration: 5,
-        width: 1080,
-        height: 1920,
-        fps: 24,
-        options: { style: "anime", local_first: true },
+        ...production,
       });
       if (!isCurrentRequest()) return;
       jobStoreActions().subscribeSSE(job.id);
@@ -135,6 +200,10 @@ const ProjectCockpit: React.FC = () => {
       setHealthText(userMessage(error));
     }
   };
+
+  const templateLabel = publishedTemplate?.published && publishedTemplate.template
+    ? `生产模板：v${publishedTemplate.template.version}`
+    : "生产模板：系统默认";
 
   return (
     <div className="studio-workspace project-cockpit">
@@ -169,6 +238,7 @@ const ProjectCockpit: React.FC = () => {
         </div>
 
         <div className="one-click-zone">
+          <p className="studio-template-source">{templateLabel}</p>
           <label className="file-drop-control">
             <input
               type="file"

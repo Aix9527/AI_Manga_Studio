@@ -4,15 +4,23 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
+  type Edge,
   type Node,
   type NodeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { userMessage } from "@/api/client";
+import {
+  getProductionTemplate,
+  listProductionTemplates,
+  publishProductionTemplate,
+  saveProductionTemplate,
+} from "@/api/productionTemplates";
 import { jobStoreActions, useJobStore } from "@/state/jobStore";
 import { useWorkspaceStore } from "@/state/workspaceStore";
 import type { JobDetail, StageExecutionMode } from "@/types/jobs";
+import type { ProductionTemplateVersion } from "@/types/productionTemplates";
 import {
   DEFAULT_PRODUCTION_EDGES,
   DEFAULT_PRODUCTION_NODES,
@@ -41,15 +49,45 @@ const EXECUTABLE_JOB_STATES = new Set<JobDetail["status"]>([
 
 type ProductionNode = Node<ProductionNodeData>;
 
+type StoredCanvas = {
+  nodes?: ProductionNode[];
+  edges?: Edge[];
+};
+
+function freshDefaultNodes(): ProductionNode[] {
+  return DEFAULT_PRODUCTION_NODES.map((node) => ({
+    ...node,
+    position: { ...node.position },
+    data: { ...node.data },
+  }));
+}
+
+function freshDefaultEdges(): Edge[] {
+  return DEFAULT_PRODUCTION_EDGES.map((edge) => ({ ...edge }));
+}
+
+function parseStoredCanvas(version: ProductionTemplateVersion): StoredCanvas {
+  const parsed = JSON.parse(version.content_json) as { canvas?: StoredCanvas };
+  return parsed.canvas ?? {};
+}
+
 const AdvancedCanvasWorkspace: React.FC = () => {
   const workspace = useWorkspaceStore((state) => state.snapshot);
   const projectId = workspace?.project_id || useWorkspaceStore.getState().projectId || "default";
   const jobStore = useJobStore();
   const actions = jobStoreActions();
+  const [nodes, setNodes] = useState<ProductionNode[]>(freshDefaultNodes);
+  const [edges, setEdges] = useState<Edge[]>(freshDefaultEdges);
   const [selectedNode, setSelectedNode] = useState<ProductionNode | null>(DEFAULT_PRODUCTION_NODES[5] ?? null);
   const [selectedShotId, setSelectedShotId] = useState("");
   const [notice, setNotice] = useState("专业精修 / 正式 Job 控制 / 节点可回放");
   const [busy, setBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(true);
+  const [templateDirty, setTemplateDirty] = useState(true);
+  const [savedVersion, setSavedVersion] = useState<number | null>(null);
+  const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
+  const [templateVersions, setTemplateVersions] = useState<ProductionTemplateVersion[]>([]);
+  const [historyVersion, setHistoryVersion] = useState<number | null>(null);
 
   const jobs = useMemo(
     () => jobStore.recentIds
@@ -58,6 +96,45 @@ const AdvancedCanvasWorkspace: React.FC = () => {
     [jobStore.jobs, jobStore.recentIds, projectId],
   );
   const productionJob = jobs[0] ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setTemplateBusy(true);
+    setSavedVersion(null);
+    setPublishedVersion(null);
+    setTemplateVersions([]);
+    setHistoryVersion(null);
+    setNodes(freshDefaultNodes());
+    setEdges(freshDefaultEdges());
+    setTemplateDirty(true);
+
+    void (async () => {
+      try {
+        const listing = await listProductionTemplates(projectId);
+        if (cancelled) return;
+        setTemplateVersions(listing.versions);
+        setPublishedVersion(listing.published_version);
+        if (listing.latest_version > 0) {
+          const latest = await getProductionTemplate(projectId, listing.latest_version);
+          if (cancelled) return;
+          const canvas = parseStoredCanvas(latest);
+          if (Array.isArray(canvas.nodes)) setNodes(canvas.nodes);
+          if (Array.isArray(canvas.edges)) setEdges(canvas.edges);
+          setSavedVersion(latest.version);
+          setHistoryVersion(latest.version);
+          setTemplateDirty(false);
+        }
+      } catch (error) {
+        if (!cancelled) setNotice(`模板状态读取失败：${userMessage(error)}`);
+      } finally {
+        if (!cancelled) setTemplateBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const shotOptions = useMemo(() => {
     if (!productionJob || !selectedNode?.data.shotScoped) return [];
@@ -114,6 +191,58 @@ const AdvancedCanvasWorkspace: React.FC = () => {
     }
   };
 
+  const saveTemplate = async () => {
+    setTemplateBusy(true);
+    try {
+      const saved = await saveProductionTemplate(projectId, {
+        name: "高级画布生产模板",
+        schema_version: 1,
+        canvas: {
+          nodes: nodes as unknown as Array<Record<string, unknown>>,
+          edges: edges as unknown as Array<Record<string, unknown>>,
+        },
+        production: {
+          shot_duration: 5,
+          width: 1080,
+          height: 1920,
+          fps: 24,
+          options: { style: "anime", local_first: true },
+        },
+        stage_policy: { stages: [] },
+      });
+      setSavedVersion(saved.version);
+      setHistoryVersion(saved.version);
+      setTemplateDirty(false);
+      setTemplateVersions((current) => [saved, ...current.filter((item) => item.version !== saved.version)]);
+      setNotice(`已保存模板 v${saved.version}；当前生产${publishedVersion ? `仍使用 v${publishedVersion}` : "尚未发布模板"}。`);
+    } catch (error) {
+      setNotice(`模板保存失败：${userMessage(error)}`);
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const publishVersion = async (version: number) => {
+    setTemplateBusy(true);
+    try {
+      const published = await publishProductionTemplate(projectId, version);
+      setPublishedVersion(published.version);
+      setTemplateVersions((current) => current.map((item) => (
+        item.version === published.version ? published : item
+      )));
+      setNotice(`v${published.version} 已发布；后续新建的一键成片任务将使用该版本，现有任务不变。`);
+    } catch (error) {
+      setNotice(`模板发布失败：${userMessage(error)}`);
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const markNodePosition = useCallback((_event: unknown, node: ProductionNode) => {
+    setNodes((current) => current.map((item) => item.id === node.id ? { ...item, position: { ...node.position } } : item));
+    setTemplateDirty(true);
+  }, []);
+
   return (
     <div className="studio-workspace canvas-workspace">
       <aside className="studio-panel canvas-library">
@@ -132,16 +261,34 @@ const AdvancedCanvasWorkspace: React.FC = () => {
           <div className="asset-tabs">
             <button type="button" className="studio-primary-button" disabled={busy || Boolean(blockedReason)} onClick={() => void execute("rerun_node")}>{busy ? "提交中…" : "运行选中节点"}</button>
             <button type="button" className="studio-secondary-button" disabled={busy || Boolean(blockedReason)} onClick={() => void execute("continue")}>从当前节点继续</button>
-            <button type="button" className="studio-secondary-button" onClick={() => setNotice("模板持久化尚未接入正式后端契约；当前流程未保存。")}>保存为模板</button>
-            <button type="button" className="studio-secondary-button" onClick={() => setNotice("模板发布尚未接入持久化契约；当前流程没有发布到一键成片。")}>发布到一键成片</button>
+            <button type="button" className="studio-secondary-button" disabled={templateBusy} onClick={() => void saveTemplate()}>{templateBusy ? "模板处理中…" : "保存为模板"}</button>
+            <button type="button" className="studio-secondary-button" disabled={templateBusy || templateDirty || savedVersion === null} onClick={() => savedVersion !== null && void publishVersion(savedVersion)}>发布到一键成片</button>
           </div>
         </header>
+        <div className="inspector-section" aria-label="生产模板状态">
+          <p className="subtle">最新保存：{savedVersion === null ? "未保存" : `v${savedVersion}`} · 当前发布：{publishedVersion === null ? "未发布" : `v${publishedVersion}`} · 画布：{templateDirty ? "有未保存修改" : "已保存"} · Schema v1</p>
+          {templateVersions.length ? (
+            <div className="inspector-field">
+              <label htmlFor="template-history-version">模板历史版本</label>
+              <select
+                id="template-history-version"
+                aria-label="模板历史版本"
+                value={historyVersion ?? ""}
+                onChange={(event) => setHistoryVersion(Number(event.target.value))}
+              >
+                {templateVersions.map((item) => <option key={item.id} value={item.version}>v{item.version}{item.version === publishedVersion ? " · 当前发布" : ""}</option>)}
+              </select>
+              <button type="button" className="studio-secondary-button" disabled={templateBusy || historyVersion === null} onClick={() => historyVersion !== null && void publishVersion(historyVersion)}>发布历史版本</button>
+            </div>
+          ) : null}
+        </div>
         {blockedReason ? <p className="studio-feedback">{blockedReason}</p> : null}
         <div className="canvas-stage" aria-label="高级生产节点画布">
           <ReactFlow<ProductionNode>
-            nodes={DEFAULT_PRODUCTION_NODES}
-            edges={DEFAULT_PRODUCTION_EDGES}
+            nodes={nodes}
+            edges={edges}
             onNodeClick={selectNode}
+            onNodeDragStop={markNodePosition}
             fitView
             minZoom={0.55}
             maxZoom={1.6}

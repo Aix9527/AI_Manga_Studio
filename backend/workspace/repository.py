@@ -5,9 +5,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+from uuid import uuid4
 
 from backend.orchestration.database import OrchestrationDatabase
-from backend.workspace.models import ProjectAsset, StageAutomation, StageKey
+from backend.workspace.models import (
+    ProductionTemplateList,
+    ProductionTemplateVersion,
+    ProjectAsset,
+    StageAutomation,
+    StageKey,
+)
 
 
 class WorkspaceRepository:
@@ -52,6 +59,163 @@ class WorkspaceRepository:
                 (project_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def save_production_template_version(
+        self,
+        project_id: str,
+        payload: dict[str, object],
+    ) -> ProductionTemplateVersion:
+        now = _now_iso()
+        with self.db.transaction(immediate=True) as conn:
+            head = conn.execute(
+                "SELECT latest_version FROM project_production_templates WHERE project_id=?",
+                (project_id,),
+            ).fetchone()
+            if head is None:
+                latest_version = 0
+                conn.execute(
+                    """INSERT INTO project_production_templates
+                       (project_id, published_version_id, latest_version, updated_at)
+                       VALUES (?, NULL, 0, ?)""",
+                    (project_id, now),
+                )
+            else:
+                latest_version = int(head["latest_version"])
+            version = latest_version + 1
+            version_id = f"ptv_{uuid4().hex}"
+            conn.execute(
+                """INSERT INTO project_production_template_versions
+                   (id, project_id, version, name, schema_version, content_json,
+                    content_sha256, compiled_json, compiled_sha256, status,
+                    created_at, published_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, NULL)""",
+                (
+                    version_id,
+                    project_id,
+                    version,
+                    str(payload.get("name") or ""),
+                    int(payload.get("schema_version") or 1),
+                    str(payload.get("content_json") or "{}"),
+                    str(payload.get("content_sha256") or ""),
+                    str(payload.get("compiled_json") or "{}"),
+                    str(payload.get("compiled_sha256") or ""),
+                    now,
+                ),
+            )
+            conn.execute(
+                """UPDATE project_production_templates
+                   SET latest_version=?, updated_at=? WHERE project_id=?""",
+                (version, now, project_id),
+            )
+            row = conn.execute(
+                "SELECT * FROM project_production_template_versions WHERE id=?",
+                (version_id,),
+            ).fetchone()
+        return self._template_from_row(row)
+
+    def get_production_template_version(
+        self, project_id: str, version: int
+    ) -> ProductionTemplateVersion | None:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                """SELECT * FROM project_production_template_versions
+                   WHERE project_id=? AND version=?""",
+                (project_id, version),
+            ).fetchone()
+        return self._template_from_row(row) if row else None
+
+    def get_published_production_template(
+        self, project_id: str
+    ) -> ProductionTemplateVersion | None:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                """SELECT versions.*
+                   FROM project_production_templates AS head
+                   JOIN project_production_template_versions AS versions
+                     ON versions.id=head.published_version_id
+                   WHERE head.project_id=?""",
+                (project_id,),
+            ).fetchone()
+        return self._template_from_row(row) if row else None
+
+    def list_production_template_versions(self, project_id: str) -> ProductionTemplateList:
+        with self.db.connect() as conn:
+            head = conn.execute(
+                """SELECT head.latest_version, versions.version AS published_version
+                   FROM project_production_templates AS head
+                   LEFT JOIN project_production_template_versions AS versions
+                     ON versions.id=head.published_version_id
+                   WHERE head.project_id=?""",
+                (project_id,),
+            ).fetchone()
+            rows = conn.execute(
+                """SELECT * FROM project_production_template_versions
+                   WHERE project_id=? ORDER BY version DESC""",
+                (project_id,),
+            ).fetchall()
+        return ProductionTemplateList(
+            project_id=project_id,
+            latest_version=int(head["latest_version"]) if head else 0,
+            published_version=(int(head["published_version"]) if head and head["published_version"] is not None else None),
+            versions=[self._template_from_row(row) for row in rows],
+        )
+
+    def publish_production_template(
+        self, project_id: str, version: int
+    ) -> ProductionTemplateVersion:
+        now = _now_iso()
+        with self.db.transaction(immediate=True) as conn:
+            row = conn.execute(
+                """SELECT * FROM project_production_template_versions
+                   WHERE project_id=? AND version=?""",
+                (project_id, version),
+            ).fetchone()
+            if row is None:
+                raise ValueError("template version not found")
+            if row["status"] == "archived":
+                raise ValueError("archived template cannot be published")
+            conn.execute(
+                """UPDATE project_production_templates
+                   SET published_version_id=?, updated_at=? WHERE project_id=?""",
+                (row["id"], now, project_id),
+            )
+            conn.execute(
+                """UPDATE project_production_template_versions
+                   SET published_at=COALESCE(published_at, ?) WHERE id=?""",
+                (now, row["id"]),
+            )
+            updated = conn.execute(
+                "SELECT * FROM project_production_template_versions WHERE id=?",
+                (row["id"],),
+            ).fetchone()
+        return self._template_from_row(updated)
+
+    def set_production_template_archived(
+        self, project_id: str, version: int, archived: bool
+    ) -> ProductionTemplateVersion:
+        with self.db.transaction(immediate=True) as conn:
+            row = conn.execute(
+                """SELECT versions.*, head.published_version_id
+                   FROM project_production_template_versions AS versions
+                   LEFT JOIN project_production_templates AS head
+                     ON head.project_id=versions.project_id
+                   WHERE versions.project_id=? AND versions.version=?""",
+                (project_id, version),
+            ).fetchone()
+            if row is None:
+                raise ValueError("template version not found")
+            if archived and row["published_version_id"] == row["id"]:
+                raise ValueError("published template cannot be archived")
+            status = "archived" if archived else "active"
+            conn.execute(
+                "UPDATE project_production_template_versions SET status=? WHERE id=?",
+                (status, row["id"]),
+            )
+            updated = conn.execute(
+                "SELECT * FROM project_production_template_versions WHERE id=?",
+                (row["id"],),
+            ).fetchone()
+        return self._template_from_row(updated)
 
     def upsert_stage_automation(self, project_id: str, value: StageAutomation) -> None:
         with self.db.transaction() as conn:
@@ -175,7 +339,6 @@ class WorkspaceRepository:
         return self._asset_from_row(row)
 
     def find_asset_by_sha256(self, project_id: str, kind: str, sha256: str) -> ProjectAsset | None:
-        """Return an active asset with the same project/kind/content-hash (dedup)."""
         if not sha256:
             return None
         with self.db.transaction() as conn:
@@ -268,6 +431,22 @@ class WorkspaceRepository:
             ).fetchone()
         return row["path"] if row else None
 
+    def _template_from_row(self, row: Any) -> ProductionTemplateVersion:
+        return ProductionTemplateVersion(
+            id=row["id"],
+            project_id=row["project_id"],
+            version=int(row["version"]),
+            name=row["name"],
+            schema_version=int(row["schema_version"]),
+            content_json=row["content_json"],
+            content_sha256=row["content_sha256"],
+            compiled_json=row["compiled_json"],
+            compiled_sha256=row["compiled_sha256"],
+            status=row["status"],
+            created_at=row["created_at"],
+            published_at=row["published_at"],
+        )
+
     def _asset_from_row(self, row: Any) -> ProjectAsset:
         try:
             metadata = json.loads(row["metadata"] or "{}")
@@ -289,9 +468,7 @@ class WorkspaceRepository:
             step_id=row["step_id"],
             kind=row["kind"],
             path=self._display_path(project_id, row["path"]),
-            media_url=(
-                f"/api/workspace/{quote(project_id, safe='')}/assets/{row['id']}/media"
-            ),
+            media_url=f"/api/workspace/{quote(project_id, safe='')}/assets/{row['id']}/media",
             stage_key=row["stage_key"] or None,
             scene_id=row["scene_id"],
             shot_id=row["shot_id"],
