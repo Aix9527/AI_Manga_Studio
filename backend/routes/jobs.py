@@ -14,10 +14,15 @@ from backend.orchestration.schemas import (
     RetryRequest,
     ReviewRequest,
     JobCommandRequest,
+    StageExecutionRequest,
     RollbackPreview,
 )
 from backend.orchestration.repository import ReviewJobNotFound, ReviewTransitionConflict
-from backend.orchestration.service import JobService
+from backend.orchestration.service import (
+    JobService,
+    StageExecutionConflict,
+    StageExecutionTargetNotFound,
+)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -66,6 +71,20 @@ async def resume_job(job_id: str, request: Request) -> JobDetail:
 @router.post("/{job_id}/retry", response_model=JobDetail)
 async def retry_job(job_id: str, body: RetryRequest, request: Request) -> JobDetail:
     return get_service(request).retry(job_id, step_id=body.step_id)
+
+
+@router.post("/{job_id}/resume-from-stage", response_model=JobDetail)
+async def resume_from_stage(
+    job_id: str,
+    body: StageExecutionRequest,
+    request: Request,
+) -> JobDetail:
+    try:
+        return get_service(request).execute_from_stage(job_id, body)
+    except StageExecutionTargetNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except StageExecutionConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.post("/{job_id}/cancel", response_model=JobDetail)
