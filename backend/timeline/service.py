@@ -83,6 +83,25 @@ class TimelineService:
     def get_draft(self, timeline_id: str) -> TimelineDraftView:
         return self._build_draft(timeline_id)
 
+    def create_snapshot(self, timeline_id: str):
+        from backend.timeline.snapshot import create_snapshot
+        return create_snapshot(self, timeline_id)
+
+    def list_snapshots(self, timeline_id: str):
+        from backend.timeline.snapshot import list_snapshots
+        if self.repo.get_timeline(timeline_id) is None:
+            raise TimelineNotFound(f"Timeline not found: {timeline_id}")
+        return list_snapshots(self.repo, timeline_id)
+
+    def get_snapshot(self, timeline_id: str, snapshot_id: str):
+        from backend.timeline.snapshot import get_snapshot
+        if self.repo.get_timeline(timeline_id) is None:
+            raise TimelineNotFound(f"Timeline not found: {timeline_id}")
+        try:
+            return get_snapshot(self.repo, timeline_id, snapshot_id)
+        except ValueError as error:
+            raise TimelineNotFound(str(error)) from error
+
     def apply_operation(
         self,
         timeline_id: str,
