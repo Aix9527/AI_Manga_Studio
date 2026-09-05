@@ -1,0 +1,33 @@
+name: Apply v0.10 Timeline Media Operations
+
+on:
+  push:
+    branches:
+      - feat/v0.10-timeline-nle-persistence
+    paths:
+      - .github/workflows/apply-v010-timeline-media-ops.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-media-ops:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v0.10-timeline-nle-persistence
+      - name: Apply patches
+        run: |
+          python scripts/apply_v010_timeline_media_ops.py
+          python scripts/apply_v010_timeline_waveform_route.py
+      - name: Verify syntax
+        run: python -m py_compile backend/timeline/models.py backend/timeline/service.py backend/timeline/routes.py backend/timeline/waveform.py
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/timeline/service.py backend/timeline/routes.py
+          git diff --cached --check
+          git commit -m "feat(timeline): add transitions subtitles and media upgrades"
+          git push origin HEAD:feat/v0.10-timeline-nle-persistence
