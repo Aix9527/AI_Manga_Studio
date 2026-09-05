@@ -79,9 +79,10 @@ const TimelineQcWorkspace: React.FC = () => {
     const result: Record<string, { artifact_id: number; version: number }> = {};
     const activeAssets = assets.filter((asset) => asset.active);
     for (const clip of timelineDraft.tracks.flatMap((track) => track.clips)) {
-      if (!clip.shot_id || clip.artifact_version == null) continue;
+      const currentVersion = clip.artifact_version;
+      if (!clip.shot_id || currentVersion == null) continue;
       const newer = activeAssets
-        .filter((asset) => asset.shot_id === clip.shot_id && asset.version > clip.artifact_version)
+        .filter((asset) => asset.shot_id === clip.shot_id && asset.version > currentVersion)
         .sort((a, b) => b.version - a.version || b.id - a.id)[0];
       if (newer) result[clip.id] = { artifact_id: newer.id, version: newer.version };
     }
