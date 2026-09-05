@@ -8,7 +8,9 @@ from backend.timeline.models import (
     TimelineOperationRequest,
     TimelineRevisionRequest,
     TimelineSummary,
+    WaveformEnvelope,
 )
+from backend.timeline.waveform import WaveformService
 from backend.timeline.service import (
     TimelineNotFound,
     TimelineRevisionConflict,
@@ -101,3 +103,24 @@ async def redo_timeline_operation(timeline_id: str, value: TimelineRevisionReque
         raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
     except (TimelineRedoUnavailable, TimelineValidationError) as error:
         raise HTTPException(status_code=422, detail={"code": "TIMELINE_HISTORY_UNAVAILABLE", "message": str(error)}) from error
+
+
+@router.get("/api/timelines/{timeline_id}/artifacts/{artifact_id}/waveform", response_model=WaveformEnvelope)
+async def get_timeline_artifact_waveform(
+    timeline_id: str,
+    artifact_id: int,
+    request: Request,
+    bins: int = 512,
+) -> WaveformEnvelope:
+    service = _service(request)
+    timeline = service.repo.get_timeline(timeline_id)
+    if timeline is None:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": "Timeline not found"})
+    waveform = WaveformService(
+        service.repo.db,
+        projects_root=service.repo.projects_root,
+    )
+    try:
+        return waveform.get_or_build(str(timeline["project_id"]), artifact_id, bins=bins)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={"code": "TIMELINE_WAVEFORM_FAILED", "message": str(error)}) from error
