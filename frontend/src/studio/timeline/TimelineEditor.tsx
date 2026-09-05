@@ -31,7 +31,6 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
 }) => {
   const [internalSelectedClipId, setInternalSelectedClipId] = useState<string | null>(null);
   const [draggingClipId, setDraggingClipId] = useState<string | null>(null);
-  const [dragTargetId, setDragTargetId] = useState<string | null>(null);
   const selectedClipId = controlledSelectedClipId ?? internalSelectedClipId;
 
   const allClips = useMemo(() => draft.tracks.flatMap((track) => track.clips), [draft.tracks]);
@@ -50,12 +49,7 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
   const handlePointerUp = (target: TimelineClip) => {
     if (!draggingClipId) return;
     const source = allClips.find((clip) => clip.id === draggingClipId);
-    if (!source) {
-      setDraggingClipId(null);
-      setDragTargetId(null);
-      return;
-    }
-    if (source.id !== target.id) {
+    if (source && source.id !== target.id) {
       onScheduleOperation({
         type: "MOVE_CLIP",
         clip_id: source.id,
@@ -63,7 +57,6 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
       });
     }
     setDraggingClipId(null);
-    setDragTargetId(null);
   };
 
   const handleTrim = (clip: TimelineClip, edge: "left" | "right") => {
@@ -136,13 +129,10 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
                   selectClip(clip);
                   if (track.role === "video.main" && !track.locked && !clip.locked) {
                     setDraggingClipId(clip.id);
-                    setDragTargetId(clip.id);
                   }
                 }}
-                onClipPointerMove={(clip) => {
-                  if (draggingClipId && track.role === "video.main") setDragTargetId(clip.id);
-                }}
-                onClipPointerUp={(clip) => handlePointerUp(dragTargetId ? allClips.find((item) => item.id === dragTargetId) ?? clip : clip)}
+                onClipPointerMove={() => undefined}
+                onClipPointerUp={handlePointerUp}
                 onTrimPointerUp={handleTrim}
               />
             ))}
