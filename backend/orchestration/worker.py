@@ -193,7 +193,11 @@ class StageExecutor:
         elif stage_key.startswith("audio_"):
             await self._run_audio_stage(job_id, step, output_dir, project_id)
         elif stage_key.startswith("composition_"):
-            await self._run_composition(job_id, step, output_dir, fps, settings, project_id)
+            timeline_settings = settings.get("timeline") or {}
+            if timeline_settings.get("source") == "timeline_snapshot":
+                await self._run_timeline_composition(job_id, step, output_dir, fps, settings, project_id)
+            else:
+                await self._run_composition(job_id, step, output_dir, fps, settings, project_id)
         elif stage_key == "export":
             await self._run_export(job_id, output_dir, fps, project_id)
         else:
@@ -907,6 +911,24 @@ class StageExecutor:
                 f"Audio generation failed for {shot_id or 'all shots'}: {e}",
             )
 
+    async def _run_timeline_composition(self, job_id: str, step: dict, output_dir: Path, fps: int, settings: dict, project_id: str = "") -> None:
+        step_id = step["id"]
+        self.repo.set_job_progress(job_id, "composition_compose", "", 0.7, "Compositing Timeline snapshot...")
+        from backend.timeline.runtime import load_verified_composition_spec
+        from backend.video.composer import VideoComposer, check_ffmpeg
+        spec = load_verified_composition_spec(self.repo, settings)
+        if spec is None:
+            raise RuntimeError("Timeline composition provenance is missing")
+        if not check_ffmpeg():
+            raise RuntimeError("FFmpeg is required for Timeline composition")
+        composer = VideoComposer(output_dir=str(output_dir))
+        final_path = output_dir / "composition" / "composite.mp4"
+        composer.compose_timeline(spec, final_path)
+        if not final_path.exists() or final_path.stat().st_size <= 0:
+            raise RuntimeError("Timeline composition produced empty output")
+        self.repo.set_job_progress(job_id, "composition_compose", "", 0.85, f"Timeline composition complete: {final_path}")
+        self._register_artifact(job_id, step_id, "composition", str(final_path), "")
+
     async def _run_composition(self, job_id: str, step: dict, output_dir: Path, fps: int, settings: dict, project_id: str = "") -> None:
         step_id = step["id"]
         self.repo.set_job_progress(
@@ -1028,6 +1050,8 @@ class StageExecutor:
                         f"Export complete: {final_path}",
                     )
                     self._register_artifact_simple(job_id, "video", str(final_path))
+                    from backend.timeline.export_binding import bind_latest_export_artifact
+                    bind_latest_export_artifact(self.repo, job_id)
                 else:
                     self.repo.set_job_progress(
                         job_id, "export", "", 1.0,

@@ -111,6 +111,30 @@ class JobService:
         self.broadcaster.broadcast(job_id, "job_created", {"job_id": job_id, "status": JobStatus.QUEUED})
         return self._build_detail(job_id)
 
+    def create_timeline_export(self, data: JobCreate, *, timeline: dict[str, Any]) -> JobDetail:
+        existing = self.repo.get_idempotent(data.idempotency_key)
+        if existing:
+            return self._build_detail(existing["id"])
+        settings = JobSettings(
+            width=data.width,
+            height=data.height,
+            fps=data.fps,
+            shot_duration=data.shot_duration,
+            options=JobOptions(**data.options) if data.options else JobOptions(),
+            timeline=dict(timeline),
+        )
+        job_id = self.repo.create_job(data, settings)
+        self.repo.create_steps(job_id, [
+            {"stage_key": "composition_compose", "shot_id": ""},
+            {"stage_key": "export", "shot_id": ""},
+        ])
+        self.repo.set_job_status(job_id, JobStatus.QUEUED, allowed_from={JobStatus.DRAFT})
+        self.broadcaster.broadcast(
+            job_id, "job_created",
+            {"job_id": job_id, "status": JobStatus.QUEUED, "source": "timeline_snapshot"},
+        )
+        return self._build_detail(job_id)
+
     def get_job(self, job_id: str) -> JobDetail | None:
         return self._build_detail(job_id) if self.repo.get_job(job_id) else None
 

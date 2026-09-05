@@ -4,7 +4,11 @@ import { CheckCircleOutlined, ExportOutlined, ReloadOutlined, SafetyCertificateO
 import { userMessage } from "@/api/client";
 import { workspaceApi } from "@/api/workspace";
 import { jobStoreActions, useJobStore } from "@/state/jobStore";
+import { useTimelineStore } from "@/state/timelineStore";
 import { useWorkspaceStore } from "@/state/workspaceStore";
+import TimelineEditor from "@/studio/timeline/TimelineEditor";
+import TimelineSnapshotPanel from "@/studio/timeline/TimelineSnapshotPanel";
+import "@/styles/timeline.css";
 import type { JobDetail } from "@/types/jobs";
 import type { ProjectAsset } from "@/workbench/types";
 
@@ -19,13 +23,28 @@ const TimelineQcWorkspace: React.FC = () => {
   const projectId = snapshot?.project_id || useWorkspaceStore.getState().projectId || "default";
   const jobStore = useJobStore();
   const actions = jobStoreActions();
+  const timelineDraft = useTimelineStore((state) => state.draft);
+  const timelineId = useTimelineStore((state) => state.timelineId);
+  const timelinePreflight = useTimelineStore((state) => state.preflight);
+  const timelineSnapshots = useTimelineStore((state) => state.snapshots);
+  const selectedSnapshotId = useTimelineStore((state) => state.selectedSnapshotId);
+  const qcBySnapshot = useTimelineStore((state) => state.qcBySnapshot);
+  const exportBySnapshot = useTimelineStore((state) => state.exportBySnapshot);
+  const timelineLoading = useTimelineStore((state) => state.loading);
+  const timelinePendingSave = useTimelineStore((state) => state.pendingSave);
+  const timelineError = useTimelineStore((state) => state.error);
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedTimelineClipId, setSelectedTimelineClipId] = useState<string | null>(null);
+  const [playheadTick, setPlayheadTick] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
+    setSelectedTimelineClipId(null);
+    setPlayheadTick(0);
+    void useTimelineStore.getState().loadProject(projectId);
     void workspaceApi.listAssets(projectId)
       .then((items) => {
         if (!alive) return;
@@ -42,20 +61,11 @@ const TimelineQcWorkspace: React.FC = () => {
     () => assets.filter((asset) => asset.kind.includes("video") || asset.kind.includes("image") || asset.kind.includes("composition")),
     [assets],
   );
-  const timelineItems = useMemo<TimelineItem[]>(() => {
-    if (mediaAssets.length) {
-      return mediaAssets.map((asset, index) => ({
-        id: asset.id,
-        label: asset.shot_id || asset.scene_id || `镜头 ${index + 1}`,
-        selectable: true,
-      }));
-    }
-    return Array.from({ length: 8 }, (_, index) => ({
-      id: -(index + 1),
-      label: `镜头 ${index + 1}`,
-      selectable: false,
-    }));
-  }, [mediaAssets]);
+  const timelineItems = useMemo<TimelineItem[]>(() => mediaAssets.map((asset, index) => ({
+    id: asset.id,
+    label: asset.shot_id || asset.scene_id || `镜头 ${index + 1}`,
+    selectable: true,
+  })), [mediaAssets]);
   const jobs = jobStore.recentIds
     .map((id) => jobStore.jobs.get(id))
     .filter((job): job is JobDetail => Boolean(job));
@@ -63,42 +73,57 @@ const TimelineQcWorkspace: React.FC = () => {
   const qcPassed = assets.filter((asset) => asset.quality_status === "passed" || asset.quality_status === "pass").length;
   const qcFailed = assets.filter((asset) => asset.quality_status === "failed" || asset.quality_status === "fail").length;
   const qcPending = Math.max(0, assets.length - qcPassed - qcFailed);
+
+  const artifactUpgrades = useMemo(() => {
+    if (!timelineDraft) return {};
+    const result: Record<string, { artifact_id: number; version: number }> = {};
+    const activeAssets = assets.filter((asset) => asset.active);
+    for (const clip of timelineDraft.tracks.flatMap((track) => track.clips)) {
+      const currentVersion = clip.artifact_version;
+      if (!clip.shot_id || currentVersion == null) continue;
+      const newer = activeAssets
+        .filter((asset) => asset.shot_id === clip.shot_id && asset.version > currentVersion)
+        .sort((a, b) => b.version - a.version || b.id - a.id)[0];
+      if (newer) result[clip.id] = { artifact_id: newer.id, version: newer.version };
+    }
+    return result;
+  }, [assets, timelineDraft]);
+
   const exportAsset = assets.find((asset) => (
     asset.active
     && asset.stage_key === "export"
     && (asset.kind.includes("video") || asset.kind.includes("composition"))
   )) ?? null;
   const exportJob = jobs.find((job) => job.current_stage === "export" || job.current_stage === "compose") ?? null;
-
-  const exportLabel = (() => {
-    if (exportAsset) return "下载成片";
-    if (exportJob?.status === "retry_wait" || exportJob?.status === "failed" || exportJob?.status === "paused") return "恢复导出";
-    if (exportJob?.status === "queued" || exportJob?.status === "running") return "导出进行中";
-    if (exportJob?.status === "waiting_review") return "等待审核";
-    return "导出成片";
-  })();
-
-  const exportDisabled = Boolean(
+  const legacyExportLabel = exportAsset
+    ? "下载成片"
+    : exportJob?.status === "retry_wait" || exportJob?.status === "failed" || exportJob?.status === "paused"
+      ? "恢复导出"
+      : exportJob?.status === "queued" || exportJob?.status === "running"
+        ? "导出进行中"
+        : exportJob?.status === "waiting_review"
+          ? "等待审核"
+          : "导出成片";
+  const legacyExportDisabled = Boolean(
     exportBusy
     || qcFailed > 0
     || qcPending > 0
     || (!exportAsset && !exportJob)
-    || (!exportAsset && exportJob?.status === "queued")
-    || (!exportAsset && exportJob?.status === "running")
-    || (!exportAsset && exportJob?.status === "waiting_review")
-    || (!exportAsset && exportJob?.status === "completed"),
+    || (!exportAsset && ["queued", "running", "waiting_review", "completed"].includes(exportJob?.status ?? "")),
   );
-
-  const exportReason = (() => {
-    if (qcFailed > 0) return "存在未通过 QC 的资产，必须修复后才能导出。";
-    if (qcPending > 0) return "仍有未完成 QC 的资产，全部通过后才能导出。";
-    if (exportAsset) return "QC 已通过，可下载当前激活导出版本。";
-    if (!exportJob) return "当前没有可恢复的 compose/export 任务；一键生产会在前置阶段完成后自动进入导出。";
-    if (exportJob.status === "queued" || exportJob.status === "running") return "compose/export 任务正在运行，无需重复提交。";
-    if (exportJob.status === "waiting_review") return "当前生产任务正在等待审核，时间线不会自动绕过审核门禁。";
-    if (exportJob.status === "completed") return "导出任务已完成，等待导出资产同步。";
-    return "恢复现有 compose/export 任务，不会创建重复的全流程 Job。";
-  })();
+  const legacyExportReason = qcFailed > 0
+    ? "存在未通过 QC 的资产，必须修复后才能导出。"
+    : qcPending > 0
+      ? "仍有未完成 QC 的资产，全部通过后才能导出。"
+      : exportAsset
+        ? "QC 已通过，可下载当前激活导出版本。"
+        : !exportJob
+          ? "当前没有可恢复的 compose/export 任务。"
+          : exportJob.status === "queued" || exportJob.status === "running"
+            ? "compose/export 任务正在运行，无需重复提交。"
+            : exportJob.status === "waiting_review"
+              ? "当前生产任务正在等待审核，时间线不会自动绕过审核门禁。"
+              : "恢复现有 compose/export 任务，不会创建重复的全流程 Job。";
 
   const downloadAsset = (asset: ProjectAsset) => {
     const anchor = document.createElement("a");
@@ -109,8 +134,8 @@ const TimelineQcWorkspace: React.FC = () => {
     document.body.removeChild(anchor);
   };
 
-  const handleExport = async () => {
-    if (exportDisabled) return;
+  const handleLegacyExport = async () => {
+    if (legacyExportDisabled) return;
     if (exportAsset) {
       downloadAsset(exportAsset);
       setMessage("已请求下载当前激活成片版本");
@@ -138,7 +163,8 @@ const TimelineQcWorkspace: React.FC = () => {
     <div className="studio-workspace timeline-workspace">
       <section className="timeline-stack">
         <header className="studio-workspace__header">
-          <div><h1>时间线 · 质检 · 导出</h1><p>多轨成片、镜头 QC、问题重试和版本导出集中在一个工作区</p></div>
+          <div><h1>时间线 · 质检 · 导出</h1><p>持久化 NLE、多轨剪辑、Snapshot QC 与确定性导出集中在一个工作区</p></div>
+          {timelinePendingSave ? <span className="nle-pending">正在保存剪辑…</span> : null}
         </header>
 
         <section className="timeline-main-preview">
@@ -148,40 +174,55 @@ const TimelineQcWorkspace: React.FC = () => {
         </section>
 
         <section className="studio-panel">
-          <div className="studio-panel__header"><div><strong>镜头时间线</strong><span>{mediaAssets.length} 个媒体产物</span></div></div>
+          <div className="studio-panel__header"><div><strong>媒体产物</strong><span>{mediaAssets.length} 个可预览素材</span></div></div>
           <div className="inspector-section">
-            <div className="timeline-ruler"><span>00:00</span><span>00:15</span><span>00:30</span><span>00:45</span><span>01:00</span><span>01:15</span><span>01:30</span></div>
-            <div className="timeline-track">
-              {timelineItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`timeline-block${selectedId === item.id ? " is-active" : ""}`}
-                  disabled={!item.selectable}
-                  onClick={() => item.selectable && setSelectedId(item.id)}
-                >{item.label}</button>
-              ))}
-            </div>
+            {timelineItems.length ? (
+              <div className="timeline-track">
+                {timelineItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`timeline-block${selectedId === item.id ? " is-active" : ""}`}
+                    disabled={!item.selectable}
+                    onClick={() => item.selectable && setSelectedId(item.id)}
+                  >{item.label}</button>
+                ))}
+              </div>
+            ) : <div className="studio-empty">当前没有可预览媒体产物</div>}
           </div>
         </section>
 
-        <section className="timeline-lanes">
-          <div className="timeline-lane"><span>镜头轨道</span><div className="timeline-lane__blocks">{Array.from({ length: 8 }).map((_, i) => <i key={i} />)}</div></div>
-          <div className="timeline-lane"><span>对白 / 配音</span><div className="timeline-lane__blocks">{Array.from({ length: 6 }).map((_, i) => <i key={i} />)}</div></div>
-          <div className="timeline-lane"><span>BGM / 音效</span><div className="timeline-lane__blocks">{Array.from({ length: 5 }).map((_, i) => <i key={i} />)}</div></div>
-          <div className="timeline-lane"><span>字幕</span><div className="timeline-lane__blocks">{Array.from({ length: 7 }).map((_, i) => <i key={i} />)}</div></div>
-        </section>
+        {timelineDraft ? (
+          <TimelineEditor
+            draft={timelineDraft}
+            playheadTick={playheadTick}
+            selectedClipId={selectedTimelineClipId}
+            artifactUpgrades={artifactUpgrades}
+            onPlayheadChange={setPlayheadTick}
+            onScheduleOperation={(operation) => useTimelineStore.getState().scheduleOperation(operation)}
+            onCriticalOperation={(operation) => useTimelineStore.getState().commitCritical(operation)}
+            onSelectClip={(clip) => {
+              setSelectedTimelineClipId(clip.id);
+              if (clip.artifact_id != null) setSelectedId(clip.artifact_id);
+            }}
+          />
+        ) : timelineLoading ? (
+          <div className="nle-empty">正在加载持久化时间线…</div>
+        ) : (
+          <div className="nle-empty">当前项目尚未建立可编辑时间线</div>
+        )}
+        {timelineError ? <p className="nle-load-error">{timelineError}</p> : null}
         {message ? <p className="studio-feedback" role="status">{message}</p> : null}
       </section>
 
       <aside className="studio-right-pane">
         <section className="studio-panel qc-summary-card">
-          <h2><SafetyCertificateOutlined /> QC Gate</h2>
+          <h2><SafetyCertificateOutlined /> 素材 QC</h2>
           <div className="qc-grid">
             <div className="qc-item is-ok">通过 <strong>{qcPassed}</strong></div>
             <div className={qcFailed ? "qc-item is-warn" : "qc-item is-ok"}>失败 <strong>{qcFailed}</strong></div>
             <div className="qc-item">待检测 <strong>{qcPending}</strong></div>
-            <div className="qc-item is-ok">角色一致性 ✓</div>
+            <div className="qc-item is-ok">Snapshot QC 独立门禁</div>
           </div>
         </section>
 
@@ -201,14 +242,31 @@ const TimelineQcWorkspace: React.FC = () => {
           </div>
         </section>
 
-        <section className="studio-panel export-box">
-          <strong><ExportOutlined /> 版本与导出</strong>
-          <p>输出继续使用本地 FFmpeg 合成链；统一时间线只恢复既有 compose/export Job，不会绕过 QC，也不会重复创建整条生产链。</p>
-          <div className="inspector-field"><label>分辨率</label><select defaultValue="1080x1920"><option>1080x1920 · 9:16</option><option>1920x1080 · 16:9</option></select></div>
-          <div className="inspector-field"><label>帧率</label><select defaultValue="24"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30">30 fps</option></select></div>
-          <p className="subtle">{exportReason}</p>
-          <button type="button" className="studio-primary-button" disabled={exportDisabled} onClick={() => void handleExport()}>{exportBusy ? "正在恢复…" : exportLabel}</button>
-        </section>
+        {timelineDraft && timelineId ? (
+          <TimelineSnapshotPanel
+            draft={timelineDraft}
+            preflight={timelinePreflight}
+            snapshots={timelineSnapshots}
+            selectedSnapshotId={selectedSnapshotId}
+            qcBySnapshot={qcBySnapshot}
+            exportBySnapshot={exportBySnapshot}
+            pendingSave={timelinePendingSave}
+            onSelectSnapshot={(snapshotId) => useTimelineStore.getState().selectSnapshot(snapshotId)}
+            onFlush={() => useTimelineStore.getState().flushPending()}
+            onCreateSnapshot={() => useTimelineStore.getState().createSnapshot()}
+            onRunQc={(snapshotId) => useTimelineStore.getState().runQc(snapshotId)}
+            onExportSnapshot={(snapshotId, profile) => useTimelineStore.getState().exportSnapshot(snapshotId, profile)}
+          />
+        ) : (
+          <section className="studio-panel export-box">
+            <strong><ExportOutlined /> 兼容导出</strong>
+            <p>当前项目没有 Timeline，继续使用 v0.9 既有 compose/export 任务，不阻塞一键生产。</p>
+            <p className="subtle">{legacyExportReason}</p>
+            <button type="button" className="studio-primary-button" disabled={legacyExportDisabled} onClick={() => void handleLegacyExport()}>
+              {exportBusy ? "正在恢复…" : legacyExportLabel}
+            </button>
+          </section>
+        )}
       </aside>
     </div>
   );

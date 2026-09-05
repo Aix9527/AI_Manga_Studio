@@ -33,6 +33,9 @@ from backend.migration.scanner import ProjectScanner
 from backend.workspace.repository import WorkspaceRepository
 from backend.workspace.service import WorkspaceService
 from backend.workspace import routes as workspace_router
+from backend.timeline.repository import TimelineRepository
+from backend.timeline.service import TimelineService
+from backend.timeline import routes as timeline_router
 from backend.routes import jobs as jobs_router
 from backend.routes import uploads as uploads_router
 from backend.routes import projects as projects_router
@@ -119,6 +122,8 @@ async def lifespan(app: FastAPI):
         db, workspace_repo, project_scanner, broadcaster,
         projects_root=projects_root, job_service=service,
     )
+    timeline_repo = TimelineRepository(db, projects_root=projects_root)
+    timeline_service = TimelineService(timeline_repo)
     task_queue = TaskQueue(root="storage/tasks")
     task_runner = H3UnifiedTaskRunner(
         task_queue, broadcaster, config, workdir="storage/chains",
@@ -190,6 +195,8 @@ async def lifespan(app: FastAPI):
     app.state.broadcaster = broadcaster
     app.state.job_service = service
     app.state.workspace_service = workspace_service
+    app.state.timeline_repo = timeline_repo
+    app.state.timeline_service = timeline_service
     app.state.worker = worker
     app.state.task_queue = task_queue
     app.state.task_runner = task_runner
@@ -238,6 +245,7 @@ def create_app() -> FastAPI:
     app.include_router(uploads_router.router)
     app.include_router(projects_router.router)
     app.include_router(workspace_router.router)
+    app.include_router(timeline_router.router)
 
     # v0.5 Phase 1-4 routes
     app.include_router(characters_router.router)

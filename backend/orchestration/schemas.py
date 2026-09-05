@@ -35,6 +35,7 @@ class JobSettings(BaseModel):
     options: JobOptions = Field(default_factory=JobOptions)
     stage_policy: list[dict[str, Any]] = Field(default_factory=list)
     template: dict[str, Any] = Field(default_factory=dict)
+    timeline: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def promote_runtime_context(self) -> "JobSettings":
