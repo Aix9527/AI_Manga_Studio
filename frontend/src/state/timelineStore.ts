@@ -69,6 +69,15 @@ function isRevisionConflict(error: unknown): error is ApiError {
   return Boolean(detail && typeof detail === "object" && "code" in detail && (detail as { code?: unknown }).code === "TIMELINE_REVISION_CONFLICT");
 }
 
+async function listSnapshotsOrEmpty(timelineId: string): Promise<TimelineSnapshot[]> {
+  try {
+    const snapshots = await Promise.resolve(timelineApi.listSnapshots(timelineId));
+    return Array.isArray(snapshots) ? snapshots : [];
+  } catch {
+    return [];
+  }
+}
+
 async function recoverRevisionConflict(timelineId: string) {
   const authoritative = await timelineApi.getDraft(timelineId);
   if (useTimelineStore.getState().timelineId !== timelineId) return;
@@ -144,7 +153,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
         if (error instanceof ApiError && error.status === 404) {
           const created = await timelineApi.initialize(projectId);
           if (generation !== loadGeneration || get().projectId !== projectId) return;
-          const snapshots = await timelineApi.listSnapshots(created.timeline_id).catch(() => []);
+          const snapshots = await listSnapshotsOrEmpty(created.timeline_id);
           if (generation !== loadGeneration || get().projectId !== projectId) return;
           set({
             timelineId: created.timeline_id,
@@ -160,7 +169,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       if (generation !== loadGeneration || get().projectId !== projectId) return;
       const nextDraft = await timelineApi.getDraft(summary.timeline_id);
       if (generation !== loadGeneration || get().projectId !== projectId) return;
-      const snapshots = await timelineApi.listSnapshots(summary.timeline_id).catch(() => []);
+      const snapshots = await listSnapshotsOrEmpty(summary.timeline_id);
       if (generation !== loadGeneration || get().projectId !== projectId) return;
       set({
         timelineId: summary.timeline_id,
