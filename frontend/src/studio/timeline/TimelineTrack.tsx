@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
-import type { TimelineClip, TimelineTrack as TimelineTrackModel } from "@/types/timeline";
+import { timelineApi } from "@/api/timeline";
+import type { TimelineClip, TimelineTrack as TimelineTrackModel, WaveformEnvelope } from "@/types/timeline";
 
 interface TimelineTrackProps {
+  timelineId?: string;
   track: TimelineTrackModel;
   pixelsPerSecond: number;
   timebaseHz: number;
@@ -15,7 +17,13 @@ interface TimelineTrackProps {
   onTrimPointerUp: (clip: TimelineClip, edge: "left" | "right") => void;
 }
 
+interface WaveformState {
+  envelope?: WaveformEnvelope;
+  error?: string;
+}
+
 const TimelineTrack: React.FC<TimelineTrackProps> = ({
+  timelineId = "",
   track,
   pixelsPerSecond,
   timebaseHz,
@@ -27,6 +35,26 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   onClipPointerUp,
   onTrimPointerUp,
 }) => {
+  const [waveforms, setWaveforms] = useState<Record<string, WaveformState>>({});
+
+  useEffect(() => {
+    if (!timelineId || track.track_type !== "audio" || track.hidden) return;
+    let alive = true;
+    for (const clip of track.clips) {
+      if (clip.artifact_id == null || waveforms[clip.id]) continue;
+      void timelineApi.getWaveform(timelineId, clip.artifact_id, 128)
+        .then((envelope) => {
+          if (!alive) return;
+          setWaveforms((current) => ({ ...current, [clip.id]: { envelope } }));
+        })
+        .catch(() => {
+          if (!alive) return;
+          setWaveforms((current) => ({ ...current, [clip.id]: { error: "波形提取失败，不影响剪辑" } }));
+        });
+    }
+    return () => { alive = false; };
+  }, [timelineId, track.track_type, track.hidden, track.clips, waveforms]);
+
   return (
     <div
       className={`nle-track nle-track--${track.track_type}${track.locked ? " is-locked" : ""}`}
@@ -42,6 +70,8 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
           const width = Math.max(42, (clip.duration_tick / timebaseHz) * pixelsPerSecond);
           const selected = selectedClipId === clip.id;
           const dragging = draggingClipId === clip.id;
+          const waveform = waveforms[clip.id];
+          const points = waveform?.envelope?.peaks ?? [];
           return (
             <button
               key={clip.id}
@@ -55,6 +85,17 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
               onPointerMove={() => onClipPointerMove(clip)}
               onPointerUp={() => onClipPointerUp(clip)}
             >
+              {points.length ? (
+                <svg className="nle-waveform" viewBox={`0 0 ${points.length} 2`} preserveAspectRatio="none" aria-hidden="true">
+                  <polyline
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="0.08"
+                    points={points.map((peak, index) => `${index},${1 - Math.max(-1, Math.min(1, peak))}`).join(" ")}
+                  />
+                </svg>
+              ) : null}
+              {waveform?.error ? <span className="nle-waveform-warning" title={waveform.error}>波形不可用</span> : null}
               <span className="nle-clip__title">{clip.shot_id || clip.scene_id || clip.id}</span>
               <small>v{clip.artifact_version ?? 1}{clip.link_group_id ? " · 🔗" : ""}</small>
               {selected && !track.locked && !clip.locked ? (
