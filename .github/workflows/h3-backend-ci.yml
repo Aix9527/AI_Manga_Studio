@@ -37,7 +37,7 @@ on:
       - ".github/workflows/h3-backend-ci.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   h3-unified:
@@ -56,3 +56,26 @@ jobs:
         run: python -m py_compile backend/main.py backend/novel_video/h3_unified_runtime.py backend/video/h3_unified/formal_provider.py backend/video/h3_unified/live_gate.py tools/h3_unified_live_gate.py
       - name: H3 unified tests
         run: pytest -q tests/video/test_h3_unified.py tests/video/test_h3_unified_router.py tests/video/test_h3_unified_execution.py tests/video/test_h3_unified_formal.py tests/video/test_h3_unified_factory.py tests/video/test_h3_unified_formal_assets.py tests/video/test_h3_unified_provider_media_binding.py tests/video/test_h3_unified_live_gate.py --disable-warnings --maxfail=1
+
+  apply-timeline-export-binding:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/v0.10-timeline-nle-persistence'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/v0.10-timeline-nle-persistence
+          fetch-depth: 0
+      - name: Apply exact export binding patch
+        run: python tools/apply_v010_export_binding_patch.py
+      - name: Commit export binding patch
+        run: |
+          if git diff --quiet -- backend/orchestration/worker.py; then
+            echo "Export binding patch already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/orchestration/worker.py
+          git commit -m "feat(timeline): bind final export artifact provenance"
+          git push origin HEAD:feat/v0.10-timeline-nle-persistence
