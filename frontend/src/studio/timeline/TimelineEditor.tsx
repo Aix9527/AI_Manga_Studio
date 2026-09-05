@@ -4,10 +4,16 @@ import TimelineInspector from "@/studio/timeline/TimelineInspector";
 import TimelineTrack from "@/studio/timeline/TimelineTrack";
 import type { TimelineClip, TimelineDraft, TimelineOperation } from "@/types/timeline";
 
+interface ArtifactUpgrade {
+  artifact_id: number;
+  version: number;
+}
+
 interface TimelineEditorProps {
   draft: TimelineDraft;
   playheadTick: number;
   selectedClipId?: string | null;
+  artifactUpgrades?: Record<string, ArtifactUpgrade>;
   onPlayheadChange: (tick: number) => void;
   onScheduleOperation: (operation: TimelineOperation) => void;
   onCriticalOperation: (operation: TimelineOperation) => void | Promise<unknown>;
@@ -24,6 +30,7 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
   draft,
   playheadTick,
   selectedClipId: controlledSelectedClipId,
+  artifactUpgrades = {},
   onPlayheadChange,
   onScheduleOperation,
   onCriticalOperation,
@@ -38,7 +45,8 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
   const durationTick = useMemo(() => Math.max(
     draft.timebase_hz,
     ...allClips.map((clip) => clip.timeline_start_tick + clip.duration_tick),
-  ), [allClips, draft.timebase_hz]);
+    ...draft.subtitle_cues.map((cue) => cue.end_tick),
+  ), [allClips, draft.subtitle_cues, draft.timebase_hz]);
   const timelineWidth = Math.max(720, (durationTick / draft.timebase_hz) * PIXELS_PER_SECOND + 120);
 
   const selectClip = (clip: TimelineClip) => {
@@ -119,6 +127,7 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
             .map((track) => (
               <TimelineTrack
                 key={track.id}
+                timelineId={draft.timeline_id}
                 track={track}
                 pixelsPerSecond={PIXELS_PER_SECOND}
                 timebaseHz={draft.timebase_hz}
@@ -139,7 +148,12 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
         </div>
       </div>
 
-      <TimelineInspector draft={draft} selectedClip={selectedClip} onCriticalOperation={onCriticalOperation} />
+      <TimelineInspector
+        draft={draft}
+        selectedClip={selectedClip}
+        artifactUpgrade={selectedClip ? artifactUpgrades[selectedClip.id] : null}
+        onCriticalOperation={onCriticalOperation}
+      />
     </div>
   );
 };
