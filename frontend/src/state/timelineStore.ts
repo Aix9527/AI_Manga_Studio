@@ -269,5 +269,5 @@ export function resetTimelineStoreForTests(): void {
   pendingOperations = [];
   flushPromise = null;
   loadGeneration += 1;
-  useTimelineStore.setState(initialState(), true);
+  useTimelineStore.setState(initialState());
 }
