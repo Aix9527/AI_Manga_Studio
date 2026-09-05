@@ -1050,6 +1050,8 @@ class StageExecutor:
                         f"Export complete: {final_path}",
                     )
                     self._register_artifact_simple(job_id, "video", str(final_path))
+                    from backend.timeline.export_binding import bind_latest_export_artifact
+                    bind_latest_export_artifact(self.repo, job_id)
                 else:
                     self.repo.set_job_progress(
                         job_id, "export", "", 1.0,
