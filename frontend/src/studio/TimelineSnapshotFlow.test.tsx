@@ -117,7 +117,7 @@ describe("Timeline Snapshot formal workflow", () => {
       />,
     );
     expect(screen.getByText("Snapshot #2")).toBeInTheDocument();
-    expect(screen.getByText(/QC.*未运行/)).toBeInTheDocument();
+    expect(screen.getAllByText(/QC.*未运行/).length).toBeGreaterThan(0);
   });
 
   it("shows stale source integrity and sends the selected output profile only after passed QC", async () => {
@@ -140,7 +140,7 @@ describe("Timeline Snapshot formal workflow", () => {
         onExportSnapshot={exportSnapshot}
       />,
     );
-    expect(screen.getByText(/源素材完整性已失效/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("源素材完整性已失效");
     expect(screen.getByRole("button", { name: /导出 Snapshot/ })).toBeDisabled();
 
     rerender(
