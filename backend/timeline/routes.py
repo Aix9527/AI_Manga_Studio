@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from backend.timeline.models import TimelineDraftView, TimelineSummary
-from backend.timeline.service import TimelineNotFound, TimelineService
+from backend.timeline.models import (
+    TimelineDraftView,
+    TimelineMutationResult,
+    TimelineOperationRequest,
+    TimelineSummary,
+)
+from backend.timeline.service import (
+    TimelineNotFound,
+    TimelineRevisionConflict,
+    TimelineService,
+    TimelineValidationError,
+)
 
 
 router = APIRouter(tags=["timeline"])
@@ -39,4 +49,29 @@ async def get_timeline_draft(timeline_id: str, request: Request) -> TimelineDraf
         raise HTTPException(
             status_code=404,
             detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)},
+        ) from error
+
+
+@router.post("/api/timelines/{timeline_id}/operations", response_model=TimelineMutationResult)
+async def apply_timeline_operation(
+    timeline_id: str,
+    value: TimelineOperationRequest,
+    request: Request,
+) -> TimelineMutationResult:
+    try:
+        return _service(request).apply_operation(timeline_id, value)
+    except TimelineNotFound as error:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)},
+        ) from error
+    except TimelineRevisionConflict as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "TIMELINE_REVISION_CONFLICT", "message": str(error)},
+        ) from error
+    except TimelineValidationError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "TIMELINE_VALIDATION_FAILED", "message": str(error)},
         ) from error
