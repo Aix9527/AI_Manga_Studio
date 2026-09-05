@@ -1,0 +1,44 @@
+name: Apply v0.10 snapshot service seam
+
+on:
+  push:
+    branches:
+      - "feat/v0.10-timeline-nle-persistence"
+    paths:
+      - ".github/workflows/apply-v010-snapshot-service.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/v0.10-timeline-nle-persistence
+          fetch-depth: 0
+      - name: Insert snapshot lifecycle seam
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("backend/timeline/service.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''    def get_draft(self, timeline_id: str) -> TimelineDraftView:\n        return self._build_draft(timeline_id)\n\n    def apply_operation(\n'''
+          new = '''    def get_draft(self, timeline_id: str) -> TimelineDraftView:\n        return self._build_draft(timeline_id)\n\n    def create_snapshot(self, timeline_id: str):\n        from backend.timeline.snapshot import create_snapshot\n        return create_snapshot(self, timeline_id)\n\n    def list_snapshots(self, timeline_id: str):\n        from backend.timeline.snapshot import list_snapshots\n        if self.repo.get_timeline(timeline_id) is None:\n            raise TimelineNotFound(f"Timeline not found: {timeline_id}")\n        return list_snapshots(self.repo, timeline_id)\n\n    def get_snapshot(self, timeline_id: str, snapshot_id: str):\n        from backend.timeline.snapshot import get_snapshot\n        if self.repo.get_timeline(timeline_id) is None:\n            raise TimelineNotFound(f"Timeline not found: {timeline_id}")\n        try:\n            return get_snapshot(self.repo, timeline_id, snapshot_id)\n        except ValueError as error:\n            raise TimelineNotFound(str(error)) from error\n\n    def apply_operation(\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one service insertion point, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Commit exact seam
+        run: |
+          if git diff --quiet -- backend/timeline/service.py; then
+            echo "No service patch needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/timeline/service.py
+          git commit -m "feat(timeline): expose immutable snapshot lifecycle"
+          git push origin HEAD:feat/v0.10-timeline-nle-persistence
