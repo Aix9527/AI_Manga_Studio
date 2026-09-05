@@ -1,29 +1,27 @@
 # v0.10 Timeline / NLE Persistence Design
 
 Date: 2026-09-05
-Status: Approved design
+Status: Approved design, self-reviewed
 Branch: `feat/v0.10-timeline-nle-persistence`
 
 ## 1. Purpose
 
 Replace the current placeholder timeline lanes with a real, persisted, non-destructive NLE while preserving the existing AI production, QC, Job, Artifact, Worker, and FFmpeg execution chain.
 
-The Timeline is an editing/control domain, not a second render engine. It compiles an immutable Timeline Snapshot into a deterministic Canonical Composition Spec, then delegates rendering to the existing composition/export path.
+Timeline is an editing/control domain, not a second render engine. It freezes an immutable Snapshot, formally QC-validates that Snapshot, compiles it into a deterministic Canonical Composition Spec, then delegates rendering to the existing composition/export path.
 
-## 2. Approved product decisions
+## 2. Frozen product decisions
 
-The following decisions are frozen for v0.10:
-
-1. The underlying model is professional free multi-track, while the v0.10 UI initially exposes a magnetic main video track plus dialogue, BGM/SFX, and subtitle tracks.
-2. Editing uses a mutable Draft plus immutable Snapshots and a persistent Operation Log.
-3. Timeline Clips pin a concrete Artifact version. New AI outputs only produce an upgrade notification; they never silently replace an edited clip.
-4. Video, dialogue, and subtitles use Link Groups by default and may be explicitly unlinked for J-cuts, L-cuts, and independent subtitle timing.
-5. The backend permits overlap, but the v0.10 main video track allows overlap only when an explicit Transition legalizes it.
-6. Undo/Redo uses persistent operations plus periodic Draft checkpoints.
-7. Drafts receive lightweight structural preflight checks; formal QC runs only against immutable Snapshots.
-8. Export flow is `Snapshot -> Canonical Composition Spec -> existing Job/Worker/FFmpeg`.
-9. Persisted time uses integer ticks with rational FPS mapping. Floating-point seconds are not authoritative.
-10. The frontend applies edits optimistically only for visual preview; committed operations are backend-authoritative. High-frequency drag events are not persisted individually.
+1. The underlying model is professional free multi-track; v0.10 UI initially exposes magnetic V1 plus dialogue, BGM/SFX, and subtitle tracks.
+2. Editing uses one mutable Draft, immutable Snapshots, a persistent Operation Log, and periodic Draft Checkpoints.
+3. Clips pin a concrete Artifact identity/version. New AI outputs never silently replace edited clips.
+4. Video, dialogue, and subtitles use Link Groups by default and may be explicitly unlinked for J-cuts, L-cuts, or independent subtitle timing.
+5. The backend supports overlap, but v0.10 V1 permits overlap only when an explicit Transition legalizes it.
+6. Undo/Redo is persistent and survives reload.
+7. Drafts receive cheap structural preflight; formal QC runs against immutable Snapshots.
+8. Export is `Snapshot -> QC -> Canonical Composition Spec -> existing Job/Worker/FFmpeg`.
+9. Persisted time uses integer ticks with rational FPS mapping; floating-point seconds are never authoritative.
+10. Drag/trim movement is local preview only; one semantic operation is committed on pointer release and backend state is authoritative.
 
 ## 3. Architecture
 
@@ -31,51 +29,44 @@ The following decisions are frozen for v0.10:
 Project
   |
   +-- Artifact Registry
-  |     +-- generated video / dialogue / BGM / images
   |
   +-- Timeline
         |
         +-- Draft
-        |     +-- Tracks
-        |     +-- Clips
-        |     +-- Link Groups
-        |     +-- Transitions
-        |     +-- Subtitle Cues
+        |     +-- Tracks / Clips / Link Groups / Transitions / Subtitle Cues
         |     +-- Operation Log
-        |     +-- Draft Checkpoints
+        |     +-- Checkpoints
         |
         +-- Immutable Snapshot
-                  |
-                  +-- Formal QC
-                  |
-                  v
-           Timeline Compiler
-                  |
-                  v
-      Canonical Composition Spec
-                  |
-                  v
-       existing Job / Worker / FFmpeg
-                  |
-                  v
-             Export Artifact
+              |
+              +-- Snapshot QC records
+              |
+              +-- Canonical Composition Spec records
+                         |
+                         v
+                  existing Job / Worker / FFmpeg
+                         |
+                         v
+                    Export Artifact
 ```
 
-### 3.1 Domain boundaries
+### 3.1 Boundaries
 
 `TimelineRepository` owns SQLite persistence only.
 
-`TimelineService` owns edit semantics, validation, transactions, optimistic concurrency, ripple behavior, linking, transitions, undo/redo, checkpoints, and snapshot creation.
+`TimelineService` owns edit semantics, transactions, invariants, optimistic concurrency, ripple behavior, linking, transitions, Undo/Redo, checkpoints, and Snapshot creation.
 
-`TimelineCompiler` owns deterministic conversion from immutable Snapshot state to Canonical Composition Spec.
+`TimelineQcService` owns formal Snapshot QC state/results. It may create/update QC records, but it never mutates Snapshot state.
 
-Existing `JobService`, Worker, production providers, QC infrastructure, Artifact lifecycle, and FFmpeg execution remain authoritative for production/render execution.
+`TimelineCompiler` owns deterministic conversion from immutable Snapshot state plus output profile to Canonical Composition Spec.
 
-The Timeline domain must not invoke FFmpeg directly.
+Existing `JobService`, Worker, production providers, Artifact lifecycle, review gates, and FFmpeg execution remain authoritative for rendering.
+
+Timeline code must not invoke FFmpeg directly.
 
 ## 4. Persistence model
 
-The Timeline domain uses the existing project SQLite database but separate tables from `ProjectAsset`.
+Timeline remains in the existing SQLite database but uses its own domain tables.
 
 ### 4.1 `timelines`
 
@@ -92,7 +83,7 @@ created_at          TEXT NOT NULL
 updated_at          TEXT NOT NULL
 ```
 
-Default `timebase_hz` is `1_000_000`. Video frame boundaries are derived with rational arithmetic from `fps_num/fps_den`; floating point is not used as the source of truth.
+Default `timebase_hz = 1_000_000`. Video frame positions use integer/rational arithmetic derived from `fps_num/fps_den`.
 
 ### 4.2 `timeline_drafts`
 
@@ -108,7 +99,7 @@ created_at          TEXT NOT NULL
 updated_at          TEXT NOT NULL
 ```
 
-Every mutation requires `expected_revision`. A mismatch returns `409 Conflict` and never silently overwrites newer state. Revision numbers always increase, including Undo/Redo.
+Every mutation includes `expected_revision`. Mismatch returns `409 Conflict`. Revision is monotonic, including Undo/Redo.
 
 ### 4.3 `timeline_tracks`
 
@@ -125,23 +116,11 @@ hidden              INTEGER NOT NULL DEFAULT 0
 metadata_json       TEXT NOT NULL DEFAULT '{}'
 ```
 
-Allowed `track_type` values in v0.10:
+Track types: `video`, `audio`, `subtitle`.
 
-- `video`
-- `audio`
-- `subtitle`
+Defined roles include `video.main`, `video.overlay`, `audio.dialogue`, `audio.bgm`, `audio.sfx`, `subtitle.primary`, and `subtitle.secondary`.
 
-Defined roles include:
-
-- `video.main`
-- `video.overlay`
-- `audio.dialogue`
-- `audio.bgm`
-- `audio.sfx`
-- `subtitle.primary`
-- `subtitle.secondary`
-
-The first UI exposes V1 main video, A1 dialogue, A2 BGM/SFX, and S1 subtitles. The model does not prevent later V2/V3/A3 tracks.
+The initial UI exposes V1, A1 dialogue, A2 BGM/SFX, and S1 subtitles; the model permits later V2/V3/A3 tracks.
 
 ### 4.4 `timeline_clips`
 
@@ -167,7 +146,7 @@ created_at          TEXT NOT NULL
 updated_at          TEXT NOT NULL
 ```
 
-Clips always pin a concrete Artifact identity/version. They never resolve dynamically to the latest active Artifact.
+A Clip pins a concrete Artifact identity/version and never resolves dynamically to the latest active Artifact.
 
 ### 4.5 `timeline_link_groups`
 
@@ -179,7 +158,7 @@ anchor_clip_id  TEXT
 created_at      TEXT NOT NULL
 ```
 
-AI-created video, dialogue, and subtitle elements may be linked automatically. A linked move/delete/ripple operation applies a common timeline delta to linked members. `UNLINK` removes only the relationship and does not realign content.
+Linked members move by a common timeline delta. Unlinking removes only the relationship and does not realign media.
 
 ### 4.6 `timeline_transitions`
 
@@ -196,13 +175,7 @@ created_at          TEXT NOT NULL
 updated_at          TEXT NOT NULL
 ```
 
-Initial transition set:
-
-- crossfade
-- fade_to_black
-- fade_from_black
-
-A normal cut is represented by adjacent clips with no transition row.
+Initial explicit transitions are `crossfade`, `fade_to_black`, and `fade_from_black`. A plain cut is adjacent Clips with no transition row.
 
 ### 4.7 `timeline_subtitle_cues`
 
@@ -221,7 +194,7 @@ created_at          TEXT NOT NULL
 updated_at          TEXT NOT NULL
 ```
 
-Subtitles remain first-class editable entities and are not hidden in Clip metadata.
+Subtitles are first-class editable entities, not hidden inside Clip metadata.
 
 ### 4.8 `timeline_operations`
 
@@ -237,27 +210,9 @@ actor               TEXT NOT NULL DEFAULT 'user'
 created_at          TEXT NOT NULL
 ```
 
-Initial operation types:
+Initial operations: `ADD_CLIP`, `REMOVE_CLIP`, `MOVE_CLIP`, `TRIM_CLIP`, `SPLIT_CLIP`, `LINK_CLIPS`, `UNLINK_CLIPS`, `ADD_TRACK`, `REMOVE_TRACK`, `REORDER_TRACK`, `ADD_TRANSITION`, `UPDATE_TRANSITION`, `REMOVE_TRANSITION`, `ADD_SUBTITLE`, `UPDATE_SUBTITLE`, `REMOVE_SUBTITLE`, and `REPLACE_ARTIFACT_VERSION`.
 
-- `ADD_CLIP`
-- `REMOVE_CLIP`
-- `MOVE_CLIP`
-- `TRIM_CLIP`
-- `SPLIT_CLIP`
-- `LINK_CLIPS`
-- `UNLINK_CLIPS`
-- `ADD_TRACK`
-- `REMOVE_TRACK`
-- `REORDER_TRACK`
-- `ADD_TRANSITION`
-- `UPDATE_TRANSITION`
-- `REMOVE_TRANSITION`
-- `ADD_SUBTITLE`
-- `UPDATE_SUBTITLE`
-- `REMOVE_SUBTITLE`
-- `REPLACE_ARTIFACT_VERSION`
-
-Undo executes an explicit inverse operation. If the user undoes and then performs a new edit, abandoned redo operations remain stored for audit but are no longer part of the active redo chain.
+Undo executes the stored inverse. Undo followed by a new edit marks the old redo branch abandoned rather than deleting its audit history.
 
 ### 4.9 `timeline_checkpoints`
 
@@ -271,130 +226,142 @@ state_sha256        TEXT NOT NULL
 created_at          TEXT NOT NULL
 ```
 
-Default checkpoint frequency is every 50 committed operations, plus mandatory checkpoints before Snapshot creation and after large batch/ripple operations.
+Default checkpoint frequency is every 50 committed operations, plus before Snapshot creation and after large batch/ripple operations.
 
-### 4.10 `timeline_snapshots`
+### 4.10 `timeline_snapshots` — immutable payload only
+
+```text
+id                    TEXT PRIMARY KEY
+timeline_id           TEXT NOT NULL
+snapshot_no           INTEGER NOT NULL
+source_draft_revision INTEGER NOT NULL
+state_json            TEXT NOT NULL
+state_sha256          TEXT NOT NULL
+duration_tick         INTEGER NOT NULL
+created_at            TEXT NOT NULL
+```
+
+After insert, these rows are immutable. Snapshot creation freezes complete track/clip/transition/subtitle/timebase state and every source Artifact identity/version/path identity/SHA needed for reproducibility. A Snapshot does not merely store mutable Draft row IDs.
+
+### 4.11 `timeline_snapshot_qc_runs`
+
+```text
+id              TEXT PRIMARY KEY
+snapshot_id     TEXT NOT NULL
+attempt         INTEGER NOT NULL
+status          TEXT NOT NULL
+report_json     TEXT NOT NULL DEFAULT '{}'
+started_at      TEXT NOT NULL
+completed_at    TEXT NULL
+created_at      TEXT NOT NULL
+UNIQUE(snapshot_id, attempt)
+```
+
+QC state is mutable operational data associated with a Snapshot; it is not stored inside the immutable Snapshot payload. Effective QC status is the latest QC attempt.
+
+Allowed states: `running`, `passed`, `failed`, `stale`.
+
+### 4.12 `timeline_composition_specs`
 
 ```text
 id                      TEXT PRIMARY KEY
-timeline_id             TEXT NOT NULL
-snapshot_no             INTEGER NOT NULL
-source_draft_revision   INTEGER NOT NULL
-state_json              TEXT NOT NULL
-state_sha256            TEXT NOT NULL
-duration_tick           INTEGER NOT NULL
-qc_status               TEXT NOT NULL
-qc_report_json          TEXT NOT NULL DEFAULT '{}'
-composition_spec_json   TEXT NULL
-composition_spec_sha256 TEXT NULL
+snapshot_id             TEXT NOT NULL
+output_profile_json     TEXT NOT NULL
+compiler_version        TEXT NOT NULL
+spec_json               TEXT NOT NULL
+spec_sha256             TEXT NOT NULL
 created_at              TEXT NOT NULL
+UNIQUE(snapshot_id, spec_sha256)
 ```
 
-Snapshots are immutable after creation. Any edit creates a new Draft state and, when requested, a new Snapshot.
+A Composition Spec is immutable once compiled. Different output profiles or compiler versions may create different spec records for the same immutable Snapshot.
 
-Snapshot `state_json` freezes complete tracks, clips, transition, subtitle, timebase, Artifact identity, Artifact version, source path identity, and media SHA256 needed for reproducibility. It must not merely store mutable Draft row IDs.
+### 4.13 `timeline_export_bindings`
+
+```text
+id                  TEXT PRIMARY KEY
+composition_spec_id TEXT NOT NULL
+job_id              TEXT NOT NULL
+artifact_id         INTEGER NULL
+status              TEXT NOT NULL
+created_at          TEXT NOT NULL
+updated_at          TEXT NOT NULL
+```
+
+This operational binding lets export executions progress without mutating either Snapshot or Composition Spec.
 
 ## 5. Hard invariants
 
-The backend, not only the UI, enforces all of the following:
+Backend invariants include:
 
 - `duration_tick > 0`
 - `source_out_tick > source_in_tick`
 - `timeline_start_tick >= 0`
-- source ranges cannot exceed Artifact media duration
+- source ranges do not exceed source Artifact duration
 - subtitle `end_tick > start_tick`
-- every referenced Artifact exists
-- Snapshot Artifact sources remain available for historical reproducibility
-- Snapshots are immutable
+- referenced Artifacts exist
+- Snapshot source identities remain available for historical reproducibility
+- Snapshot payload rows are immutable after insert
+- Composition Spec rows are immutable after insert
 - locked tracks reject mutations
-- locked clips reject move/trim/delete
-- main V1 gaps are disallowed in magnetic mode
-- main V1 overlap is disallowed unless covered by a valid explicit Transition
-- Transition duration cannot exceed available source handles
+- locked Clips reject move/trim/delete
+- magnetic V1 has no ordinary gaps
+- V1 overlap requires a valid explicit Transition
+- Transition duration does not exceed available handles
 - `expected_revision` mismatch returns `409 Conflict`
-- batch replacement/ripple edits are atomic
+- ripple/batch operations are atomic
 
-Artifacts referenced by Snapshots may become inactive or archived, but must not be physically deleted while a reproducible Snapshot depends on them.
+Artifacts referenced by immutable Snapshots may become inactive or archived, but they must not be physically deleted while those Snapshots require them for reproducibility.
 
-## 6. Editing semantics
+## 6. Editing contract
 
 ### 6.1 Magnetic V1
 
-`video.main` behaves as a magnetic story track. Dragging is semantically a reorder/insert operation, not arbitrary coordinate placement. Removing or shortening a main-track clip ripples following main-track clips.
-
-`video.overlay` tracks remain free-positioned at the data-model level for later UI expansion.
+`video.main` is a magnetic story track. Dragging is reorder/insert semantics rather than arbitrary coordinate placement. Shortening/removing a V1 Clip ripples later V1 Clips. Future `video.overlay` tracks remain free-positioned.
 
 ### 6.2 Trim
 
-Trim is non-destructive. It changes source range and timeline duration only; it never rewrites the media Artifact.
-
-Main-track trim ripples subsequent main-track items. Free tracks do not ripple unrelated content.
+Trim is non-destructive and changes source range/timeline duration only. V1 trim ripples later V1 content; free tracks do not ripple unrelated media.
 
 ### 6.3 Split
 
-Split creates two Clips referencing the same Artifact version with complementary source ranges. No new media is generated.
-
-If linked dialogue or subtitle content crosses the split point, a linked split may split those members as well. Members not covering the split point remain unchanged.
+Split produces two Clips that reference the same pinned Artifact version with complementary source ranges. No new media is generated. Linked dialogue/subtitle content crossing the split point may be split in the same transaction.
 
 ### 6.4 Delete
 
-Supported semantics include `DELETE_RIPPLE`, `DELETE_LIFT`, and linked delete. v0.10 exposes ripple delete for V1 by default; free gap-producing lift delete remains a lower-level/future professional operation.
-
-BGM does not participate in V1 ripple unless the user explicitly links it to a shot.
+The model recognizes ripple delete, lift delete, and linked delete. v0.10 exposes ripple delete by default for V1. BGM/SFX does not ripple with V1 unless explicitly linked.
 
 ### 6.5 Link / Unlink
 
-Linking creates a relationship without changing timing. Linked members move together by common delta. Unlinking never snaps or realigns content and therefore preserves J-cut/L-cut timing.
+Linking creates a relationship without changing timing. Unlinking removes only that relationship, preserving existing J-cut/L-cut timing.
 
-### 6.6 Transitions and overlap
+### 6.6 Transition overlap
 
-Main-track overlap is legal only if an explicit Transition row validates the overlap. v0.10 UI creates controlled overlap through transitions rather than free manual overlap.
-
-A transition must have sufficient source handles on both adjacent clips. Insufficient handles produce a validation error; the system does not silently freeze or AI-extend frames.
+V1 overlap is legal only where an explicit Transition validates it. Transition creation requires enough unused source handle on both sides. Insufficient handles fail validation; the system does not silently freeze or AI-extend frames.
 
 ### 6.7 Artifact replacement
 
-New AI versions never alter existing clips automatically. UI reports that a newer Artifact is available.
-
-`REPLACE_ARTIFACT_VERSION` may replace one Clip or all references in a batch. Existing timeline timing and source ranges are preserved only if the new Artifact is long enough. If not, the operation rejects with a structured `replacement_media_too_short` conflict unless the user explicitly selects a future/manual trim-to-fit strategy.
-
-Batch replacement is all-or-nothing.
+New AI versions only produce upgrade notices. `REPLACE_ARTIFACT_VERSION` can replace one Clip or all relevant references. Existing timing/source ranges are preserved only when the new media supports them. Otherwise the operation fails with structured `replacement_media_too_short`. Batch replacement is all-or-nothing.
 
 ### 6.8 Undo / Redo
 
-Every committed edit appends an operation and increments Draft revision. Undo applies the stored inverse and also increments revision. Redo reapplies an eligible operation and increments revision.
-
-After Undo, a new edit abandons the old redo branch without deleting its audit history.
+Every successful operation and every Undo/Redo increments Draft revision. Undo applies an explicit inverse. A new edit after Undo abandons the previous redo branch while retaining audit history.
 
 ### 6.9 Frontend commit behavior
 
-Pointer movement during drag/trim is local ephemeral preview only. A single semantic operation is sent on pointer release. The backend response is authoritative and replaces local committed state.
+Pointer movement is ephemeral local preview. One semantic operation is committed on pointer release. Backend returned Draft state always replaces local committed state.
 
-## 7. Draft preflight and formal QC
+## 7. Draft preflight and formal Snapshot QC
 
-Draft preflight is cheap and structural. It may report:
+Draft preflight is cheap and structural. It reports missing Artifact references, invalid ranges, illegal V1 gaps/overlap, broken transitions/link groups, subtitle timing problems, source overflow, and newer Artifact availability.
 
-- missing Artifact references
-- negative/invalid ranges
-- illegal main-track gaps
-- illegal overlap
-- broken transitions
-- broken link groups
-- subtitle timing violations
-- source-range overflow
-- newer Artifact version available
+Heavy media checks are not run on every drag.
 
-Heavy media checks do not block every edit.
+Formal QC always targets an immutable Snapshot. It includes structural integrity, media quality checks where supported, and production gates including no pending/failed required QC and no review bypass.
 
-Formal QC runs only on immutable Snapshots and may include:
+A Snapshot is exportable only when its latest valid QC attempt is `passed` and source integrity still verifies at export time.
 
-1. Structural integrity checks.
-2. Media checks such as black/static/mosaic, audio presence, clipping/loudness, and subtitle safe area.
-3. Production gates such as all required assets passed, no pending QC, no failed QC, and no review bypass.
-
-A Snapshot must be `passed` before export.
-
-If a Snapshot source file disappears or its SHA no longer matches the frozen identity, export fails closed and the Snapshot QC becomes stale/integrity-failed. The renderer must never silently use a different file at the same path.
+If a source disappears or its SHA differs from the Snapshot-frozen identity, export fails closed. A new QC run records `stale`; no Snapshot payload is mutated.
 
 ## 8. Backend API contract
 
@@ -406,7 +373,7 @@ POST /api/projects/{project_id}/timeline/initialize
 GET  /api/timelines/{timeline_id}/draft
 ```
 
-Initialization may build the first Draft from existing active project Artifacts when no Timeline exists. It must never overwrite an already edited Timeline.
+Initialization may create the first Draft from existing active project Artifacts only if no Timeline exists. It never overwrites edited Timeline state.
 
 ### 8.2 Operations
 
@@ -416,7 +383,7 @@ POST /api/timelines/{timeline_id}/undo
 POST /api/timelines/{timeline_id}/redo
 ```
 
-Operation requests include `expected_revision` and a semantic operation type/payload. Responses include the new revision, operation sequence, authoritative Draft state, and Draft preflight result.
+Requests include `expected_revision`. Responses include the new revision, operation sequence, authoritative Draft, and structural preflight.
 
 ### 8.3 Snapshot lifecycle
 
@@ -426,7 +393,7 @@ GET  /api/timelines/{timeline_id}/snapshots
 GET  /api/timelines/{timeline_id}/snapshots/{snapshot_id}
 ```
 
-Snapshot creation flushes committed edits, validates all structural invariants and media identities, freezes complete state, and calculates `state_sha256`.
+Snapshot creation validates all invariants and media identities, freezes state, computes SHA256, inserts once, and never updates the Snapshot payload afterward.
 
 ### 8.4 Snapshot QC
 
@@ -435,13 +402,7 @@ POST /api/timeline-snapshots/{snapshot_id}/qc
 GET  /api/timeline-snapshots/{snapshot_id}/qc
 ```
 
-QC states:
-
-- `not_run`
-- `running`
-- `passed`
-- `failed`
-- `stale`
+`POST` creates a new QC attempt. `GET` returns attempts plus effective/latest status.
 
 ### 8.5 Export
 
@@ -449,17 +410,15 @@ QC states:
 POST /api/timeline-snapshots/{snapshot_id}/export
 ```
 
-Export validates Snapshot integrity and QC, compiles a Composition Spec, stores compiler provenance, then enters the existing compose/export Job path.
+Export requires a valid passed QC attempt, re-verifies source integrity, compiles or resolves an immutable Composition Spec for the requested output profile, and then enters the existing compose/export Job path.
 
-The endpoint is idempotent by `(snapshot_id, composition_spec_sha256)` unless the caller explicitly requests a new render attempt under a supported future rerender mode.
+Export idempotency is keyed by `composition_spec_id/spec_sha256`. If an equivalent execution is running, return it. If a successful equivalent Export Artifact exists, return it. Do not create duplicate full production jobs.
 
-If an equivalent Job is running, return it. If a successful equivalent export Artifact exists, return it. Do not create duplicate full production jobs.
-
-Review states and QC gates remain authoritative and cannot be bypassed through Timeline APIs.
+QC and review states cannot be bypassed through Timeline APIs.
 
 ## 9. Canonical Composition Spec
 
-The Timeline Compiler emits a deterministic render-neutral schema, conceptually:
+Conceptual schema:
 
 ```json
 {
@@ -491,45 +450,46 @@ Each media entry freezes at least Clip ID, Artifact ID/version, Artifact SHA256,
 Compiler responsibilities:
 
 1. Validate immutable Snapshot state.
-2. Resolve Artifact paths.
-3. Verify Artifact identity and SHA256.
-4. Normalize all time values with integer/rational arithmetic.
-5. Resolve transitions and audio/subtitle placement.
-6. Emit deterministic serialized data.
-7. Calculate `composition_spec_sha256`.
+2. Resolve and verify Artifact paths/SHA.
+3. Normalize timing using integer/rational arithmetic.
+4. Resolve transition, audio, and subtitle placement.
+5. Include all render-affecting output profile values.
+6. Emit deterministic canonical serialized data.
+7. Calculate `spec_sha256`.
 
-For the same Snapshot, output profile, and compiler version, the resulting Composition Spec SHA must be deterministic.
+For identical Snapshot state, output profile, and compiler version, `spec_sha256` must be deterministic.
 
-The compiler does not construct or execute FFmpeg commands. Existing composition execution translates the Canonical Composition Spec into renderer-specific commands.
+The compiler does not create or execute FFmpeg commands. Existing composition execution translates the spec into renderer-specific commands.
 
 ## 10. Provenance
 
-Jobs created from Timeline export freeze at least:
+Timeline export Jobs freeze:
 
 ```text
 timeline_id
-timeline_snapshot_id
-timeline_snapshot_no
-timeline_state_sha256
+snapshot_id
+snapshot_no
+snapshot_state_sha256
+composition_spec_id
 composition_spec_sha256
 compiler_version
 ```
 
 Final Export Artifact metadata stores the same Timeline provenance plus `job_id`.
 
-Any final render must be traceable back to the exact immutable editing state and exact pinned media versions that produced it.
+Every render must be traceable to the exact immutable Snapshot and pinned media identities used.
 
-## 11. Frontend NLE design
+## 11. Frontend NLE
 
 The existing `/timeline` workspace remains the entry point.
 
 ### 11.1 Preview
 
-Preview adds play/pause, current timecode, previous/next frame, cut navigation, selected Clip details, and Snapshot status.
+Add play/pause, timecode, previous/next frame, cut navigation, selected Clip information, and Snapshot status.
 
-### 11.2 Real timeline lanes
+### 11.2 Real lanes
 
-Replace placeholder lane blocks with persisted tracks and Clips:
+Replace placeholder blocks with persisted data:
 
 ```text
 V1 Main Video : [shot1][shot2][shot3]
@@ -538,164 +498,63 @@ A2 BGM/SFX    : [--------- bgm --------]
 S1 Subtitle   :        [sub2]  [sub3]
 ```
 
-Initial UI operations:
-
-- select Clip
-- magnetic reorder
-- left/right trim
-- split at playhead
-- ripple delete
-- Undo/Redo
-- Link/Unlink
-- add/remove initial transitions
-- dialogue timing adjustment
-- BGM/SFX timing adjustment
-- subtitle text/timing editing
-- Artifact version upgrade action
-- Snapshot create/QC/export
+Initial UI operations: Clip selection, magnetic reorder, trim, split, ripple delete, Undo/Redo, Link/Unlink, transition add/remove, dialogue/BGM timing adjustment, subtitle text/timing editing, Artifact version replacement, Snapshot creation/QC/export.
 
 ### 11.3 Inspector
 
-The right pane switches between Clip, Audio, Subtitle, Transition, and Snapshot/QC inspectors.
+Right pane switches between Clip, Audio, Subtitle, Transition, and Snapshot/QC inspectors.
 
 ### 11.4 Snapping
 
-v0.10 supports snapping to:
+Support frame boundaries, Clip start/end, playhead, transition boundaries, and subtitle boundaries. Video commits land on exact valid frame boundaries; audio/subtitles may retain finer tick precision.
 
-- frame boundaries
-- Clip start/end
-- playhead
-- transition boundaries
-- subtitle boundaries
+### 11.5 Link UX
 
-Video commits always land on a valid video frame boundary. Audio/subtitles may retain finer tick precision.
+Linked content displays explicit link state. Independent movement of linked content requires explicit unlink; UI does not silently break the relationship.
 
-### 11.5 Link visualization
+### 11.6 Artifact upgrade UX
 
-Linked content displays an explicit linked state. Independent movement of linked content requires explicit unlink; the UI must not silently break relationships.
-
-### 11.6 New Artifact notifications
-
-A Clip shows its pinned version and a badge when a newer Artifact lineage member exists. Users may replace only the selected Clip, replace all references to the shot/source lineage, or keep the current version.
+Clips show pinned version and newer-version availability. User may replace selected Clip, replace all compatible references, or keep the current version.
 
 ### 11.7 Waveform
 
-Waveforms are real cached peak data, not placeholders and not raw PCM stored in SQLite. Cache identity includes source Artifact SHA. A changed source invalidates the cache.
+Waveforms use cached peak data keyed by source Artifact SHA. Raw PCM is not stored in SQLite. Cache invalidates when source identity changes.
 
 ### 11.8 Draft vs Snapshot UX
 
-The UI clearly separates:
-
-- Draft Preflight: structural editing issues, dirty state, and newer Artifact notices.
-- Selected Snapshot QC: immutable Snapshot number, QC state/report, and export readiness.
-
-The UI must always provide a specific reason when export is disabled.
+UI separates Draft Preflight from Selected Snapshot QC and always explains why export is disabled.
 
 ## 12. Implementation slices
 
 ### Slice 1 — Timeline Domain Foundation
 
-- SQLite schema
-- Timeline repository
-- models/schemas
-- initialize/read Draft
-- revision/concurrency
-- immutable Snapshot foundation
+SQLite schema, repository, models/schemas, initialization/read, revision/concurrency, immutable Snapshot foundation.
 
 ### Slice 2 — Core Editing Engine
 
-- MOVE
-- TRIM
-- SPLIT
-- RIPPLE_DELETE
-- LINK/UNLINK
-- Undo/Redo
-- checkpoints
-- hard invariants and transactionality
+MOVE, TRIM, SPLIT, RIPPLE_DELETE, LINK/UNLINK, Undo/Redo, checkpoints, invariants, and transactionality.
 
 ### Slice 3 — Real Timeline UI
 
-- persisted Track/Clip rendering
-- playhead and zoom
-- drag/reorder
-- trim
-- split
-- delete
-- Undo/Redo
-- Link visualization
-- backend-authoritative reconciliation
+Persisted Track/Clip rendering, playhead/zoom, drag, trim, split, delete, Undo/Redo, Link state, and backend-authoritative reconciliation.
 
 ### Slice 4 — Transition / Subtitle / Artifact Upgrade
 
-- transitions
-- subtitle editing
-- waveform cache/render
-- newer Artifact detection
-- replace one/all references
+Transitions, subtitle editing, waveform cache/render, newer Artifact detection, and replace one/all references.
 
 ### Slice 5 — Snapshot QC + Composition Export
 
-- Snapshot creation
-- formal Snapshot QC
-- Canonical Composition Spec compiler
-- deterministic SHA
-- Job integration
-- idempotent export
-- export provenance
+Snapshot creation, formal QC records, deterministic Composition Spec compilation, existing Job integration, idempotent export, and export provenance.
 
-v0.10 is not considered complete until Slice 5 closes the edit-to-export loop.
+v0.10 is not complete until Slice 5 closes the full edit-to-export loop.
 
 ## 13. Testing contract
 
-Backend tests must cover at least:
+Backend coverage must include Timeline initialization; revision conflict; ripple move; trim; source overflow rejection; exact-frame and linked split; ripple/linked delete; Link/Unlink; illegal overlap rejection; transition overlap and insufficient-handle behavior; Artifact replacement and atomic rollback; Undo/Redo and abandoned redo branches; checkpoint restore; Snapshot payload immutability/SHA determinism; QC records not mutating Snapshot payload; Composition Specs not mutating Snapshot payload; Artifact hash mismatch; Snapshot QC gate; Composition Spec determinism; duplicate export idempotency; pending/failed QC rejection; and waiting-review bypass rejection.
 
-- Timeline initialization
-- Draft revision conflict
-- main-track ripple move
-- trim left/right
-- source overflow rejection
-- split at exact frame boundary
-- linked split
-- ripple delete
-- linked delete
-- Link/Unlink
-- illegal overlap rejection
-- transition overlap acceptance
-- insufficient transition handles rejection
-- Artifact version replacement
-- replacement-too-short rejection
-- batch replacement transaction rollback
-- Undo
-- Redo
-- Undo then new edit abandons redo branch
-- checkpoint restore
-- Snapshot immutability
-- Snapshot SHA determinism
-- Artifact hash mismatch
-- Snapshot QC gate
-- Composition Spec determinism
-- duplicate export idempotency
-- failed/pending QC export rejection
-- waiting-review bypass rejection
+Frontend coverage must include removal of placeholder lanes; real Draft rendering; Clip selection; preview-only dragging until pointer release; trim; split; Undo/Redo; revision-conflict reload; Link state/explicit unlink; Artifact upgrade badge; transition validation; Snapshot/QC state; and precise export-disabled reasons.
 
-Frontend tests must cover at least:
-
-- placeholder lanes removed
-- real Draft rendering
-- Clip selection
-- drag is preview-only until pointer release
-- trim preview/commit
-- split
-- Undo/Redo
-- revision-conflict reload
-- Link indicator and explicit unlink behavior
-- newer Artifact badge
-- transition validation
-- Snapshot state
-- QC state
-- precise export-disabled reasons
-
-End-to-end acceptance includes:
+End-to-end acceptance:
 
 ```text
 Create/import project media
@@ -705,37 +564,32 @@ Create/import project media
 -> split
 -> edit subtitle
 -> add crossfade
--> create Snapshot
+-> create immutable Snapshot
 -> formal QC
 -> export
 -> verify final Artifact provenance
 ```
 
-Recovery acceptance includes:
+Recovery acceptance:
 
 ```text
-edit
--> refresh browser
--> Draft restored
--> Undo remains available
+edit -> refresh browser -> Draft restored -> Undo still works
 ```
 
-Integrity acceptance includes:
+Integrity acceptance:
 
 ```text
 Snapshot passes QC
 -> source Artifact file is externally replaced
 -> export fails closed
+-> Snapshot state_sha256 remains unchanged
 ```
 
 ## 14. Explicitly out of scope for v0.10
 
-The following are deliberately deferred:
-
 - V2/V3 professional overlay UI
 - picture-in-picture
-- nested sequences
-- compound clips
+- nested/compound sequences
 - multicam
 - speed-ramp UI
 - slip/slide/roll edit UI
@@ -746,21 +600,10 @@ The following are deliberately deferred:
 - cloud Timeline sync
 - direct external NLE/Resolve bridge
 
-The persistence model should not prevent later addition of these capabilities, but v0.10 must not implement them indirectly or partially.
+The persistence model must not prevent later addition of these capabilities, but v0.10 must not partially implement them.
 
 ## 15. Success criteria
 
-v0.10 succeeds when the `/timeline` workspace is no longer a placeholder representation and becomes a real persisted NLE with:
+v0.10 succeeds when `/timeline` becomes a real persisted NLE with non-destructive revision-safe editing, reload-safe Undo/Redo, explicit Artifact version pinning, magnetic V1 on a professional multi-track foundation, transitions/audio/subtitle editing, immutable Snapshots, formal QC gates, deterministic Composition Specs, existing Job/Worker/FFmpeg export integration, and exact final-Artifact provenance.
 
-- non-destructive, revision-safe editing
-- reliable Undo/Redo after page reload
-- explicit Artifact version pinning
-- magnetic V1 behavior with professional multi-track foundations
-- transitions, dialogue/BGM/subtitle editing
-- immutable versioned Snapshots
-- hard Snapshot QC gates
-- deterministic Composition Spec compilation
-- existing Job/Worker/FFmpeg export integration
-- final Artifact provenance that identifies the exact Snapshot and media identities used
-
-The design preserves one authoritative production/render pipeline and does not create a parallel renderer or QC bypass.
+The system retains one authoritative production/render pipeline and creates no parallel renderer or QC/review bypass.
