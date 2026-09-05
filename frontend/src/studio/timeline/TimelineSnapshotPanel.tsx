@@ -49,10 +49,10 @@ const TimelineSnapshotPanel: React.FC<TimelineSnapshotPanelProps> = ({
   const [resolution, setResolution] = useState("1080x1920");
   const [fps, setFps] = useState("24");
   const [busy, setBusy] = useState<"snapshot" | "qc" | "export" | null>(null);
-  const selected = useMemo(
-    () => snapshots.find((item) => item.id === selectedSnapshotId) ?? snapshots.at(-1) ?? null,
-    [snapshots, selectedSnapshotId],
-  );
+  const selected = useMemo(() => {
+    const explicit = snapshots.find((item) => item.id === selectedSnapshotId);
+    return explicit ?? (snapshots.length ? snapshots[snapshots.length - 1] : null);
+  }, [snapshots, selectedSnapshotId]);
   const qc = selected ? qcBySnapshot[selected.id] : undefined;
   const qcStatus = qc?.effective_status ?? "not_run";
   const exportResult = selected ? exportBySnapshot[selected.id] : undefined;
