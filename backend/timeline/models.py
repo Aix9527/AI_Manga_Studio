@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -59,3 +61,62 @@ class TimelineSummary(BaseModel):
 class TimelinePreflight(BaseModel):
     status: str = "pass"
     warnings: list[dict[str, object]] = Field(default_factory=list)
+
+
+class MoveClipOperation(BaseModel):
+    type: Literal["MOVE_CLIP"]
+    clip_id: str
+    insert_before_clip_id: str | None = None
+    insert_after_clip_id: str | None = None
+
+
+class TrimClipOperation(BaseModel):
+    type: Literal["TRIM_CLIP"]
+    clip_id: str
+    edge: Literal["left", "right"]
+    target_source_tick: int = Field(ge=0)
+
+
+class SplitClipOperation(BaseModel):
+    type: Literal["SPLIT_CLIP"]
+    clip_id: str
+    timeline_tick: int = Field(ge=0)
+
+
+class RemoveClipOperation(BaseModel):
+    type: Literal["REMOVE_CLIP"]
+    clip_id: str
+    mode: Literal["ripple", "lift", "linked"] = "ripple"
+
+
+class LinkClipsOperation(BaseModel):
+    type: Literal["LINK_CLIPS"]
+    clip_ids: list[str] = Field(min_length=2)
+
+
+class UnlinkClipsOperation(BaseModel):
+    type: Literal["UNLINK_CLIPS"]
+    clip_ids: list[str] = Field(min_length=1)
+
+
+TimelineOperation = Annotated[
+    MoveClipOperation
+    | TrimClipOperation
+    | SplitClipOperation
+    | RemoveClipOperation
+    | LinkClipsOperation
+    | UnlinkClipsOperation,
+    Field(discriminator="type"),
+]
+
+
+class TimelineOperationRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    operation: TimelineOperation
+
+
+class TimelineMutationResult(BaseModel):
+    revision: int
+    operation_seq: int
+    draft: TimelineDraftView
+    preflight: TimelinePreflight = Field(default_factory=TimelinePreflight)
