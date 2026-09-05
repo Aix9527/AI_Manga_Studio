@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+COMPOSE_TIMELINE = r'''    def compose_timeline(self, spec: dict, output_path: Path) -> Path:
+        """Render a canonical Timeline Composition Spec with the existing FFmpeg backend."""
+        from decimal import Decimal, ROUND_HALF_UP
+        import math
+
+        if spec.get("schema_version") != 1 or spec.get("compiler_version") != "timeline-compose/v1":
+            raise ValueError("Unsupported timeline composition spec")
+        timebase = spec.get("timebase") or {}
+        output = spec.get("output") or {}
+        ticks_per_second = int(timebase.get("ticks_per_second") or 0)
+        width = int(output.get("width") or 0)
+        height = int(output.get("height") or 0)
+        fps_num = int(output.get("fps_num") or 0)
+        fps_den = int(output.get("fps_den") or 0)
+        if ticks_per_second <= 0 or width <= 0 or height <= 0 or fps_num <= 0 or fps_den <= 0:
+            raise ValueError("Invalid timeline timebase/output profile")
+
+        allowed_transitions = {"cut", "crossfade", "fade_to_black", "fade_from_black"}
+        transitions = spec.get("transitions") or []
+        for transition in transitions:
+            transition_type = str(transition.get("transition_type") or "cut")
+            if transition_type not in allowed_transitions:
+                raise ValueError(f"Unsupported timeline transition: {transition_type}")
+
+        def seconds(tick: int) -> str:
+            value = Decimal(int(tick)) / Decimal(ticks_per_second)
+            rendered = format(value.normalize(), "f")
+            return "0" if rendered == "-0" else rendered
+
+        def millis(tick: int) -> int:
+            value = (Decimal(int(tick)) * Decimal(1000) / Decimal(ticks_per_second)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+            return int(value)
+
+        def escape_drawtext(value: str) -> str:
+            return (
+                value.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace(":", "\\:")
+                .replace("%", "\\%")
+                .replace("\n", "\\n")
+            )
+
+        tracks = spec.get("tracks") or []
+        video_tracks = [t for t in tracks if t.get("role") == "video.main" and not t.get("muted")]
+        if len(video_tracks) != 1:
+            raise ValueError("v0.10 timeline renderer requires exactly one video.main track")
+        video_clips = [c for c in video_tracks[0].get("clips", []) if c.get("enabled", True)]
+        video_clips.sort(key=lambda c: (int(c.get("timeline_start_tick") or 0), str(c.get("id") or "")))
+        if not video_clips:
+            raise ValueError("Timeline composition has no enabled video clips")
+
+        audio_clips: list[dict] = []
+        for track in tracks:
+            if track.get("track_type") == "audio" and not track.get("muted"):
+                audio_clips.extend(c for c in track.get("clips", []) if c.get("enabled", True))
+        audio_clips.sort(key=lambda c: (int(c.get("timeline_start_tick") or 0), str(c.get("id") or "")))
+
+        input_args: list[str] = []
+        for clip in video_clips:
+            source = Path(str(clip.get("source_path") or ""))
+            if not source.is_file():
+                raise FileNotFoundError(f"Timeline video source missing: {source}")
+            input_args.extend(["-i", str(source)])
+        for clip in audio_clips:
+            source = Path(str(clip.get("source_path") or ""))
+            if not source.is_file():
+                raise FileNotFoundError(f"Timeline audio source missing: {source}")
+            input_args.extend(["-i", str(source)])
+
+        filters: list[str] = []
+        for index, clip in enumerate(video_clips):
+            source_in = int(clip.get("source_in_tick") or 0)
+            duration = int(clip.get("duration_tick") or 0)
+            if duration <= 0:
+                raise ValueError("Timeline video clip duration must be positive")
+            filters.append(
+                f"[{index}:v]trim=start={seconds(source_in)}:duration={seconds(duration)},"
+                f"setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,fps={fps_num}/{fps_den},format=yuv420p[v{index}]"
+            )
+
+        transition_by_pair = {
+            (str(t.get("from_clip_id") or ""), str(t.get("to_clip_id") or "")): t
+            for t in transitions
+        }
+        current_video = "v0"
+        accumulated_tick = int(video_clips[0].get("duration_tick") or 0)
+        for index in range(1, len(video_clips)):
+            previous, current = video_clips[index - 1], video_clips[index]
+            transition = transition_by_pair.get((str(previous.get("id") or ""), str(current.get("id") or "")))
+            transition_type = str((transition or {}).get("transition_type") or "cut")
+            duration_tick = int((transition or {}).get("duration_tick") or 0)
+            out = f"vchain{index}"
+            if transition_type == "crossfade":
+                if duration_tick <= 0:
+                    raise ValueError("Crossfade transition duration must be positive")
+                offset_tick = accumulated_tick - duration_tick
+                if offset_tick < 0:
+                    raise ValueError("Crossfade duration exceeds available timeline")
+                filters.append(
+                    f"[{current_video}][v{index}]xfade=transition=fade:duration={seconds(duration_tick)}:"
+                    f"offset={seconds(offset_tick)}[{out}]"
+                )
+                accumulated_tick = offset_tick + int(current.get("duration_tick") or 0)
+            else:
+                left, right = current_video, f"v{index}"
+                if transition_type == "fade_to_black" and duration_tick > 0:
+                    faded = f"vfadeout{index}"
+                    start_tick = max(0, accumulated_tick - duration_tick)
+                    filters.append(
+                        f"[{left}]fade=t=out:st={seconds(start_tick)}:d={seconds(duration_tick)}[{faded}]"
+                    )
+                    left = faded
+                if transition_type == "fade_from_black" and duration_tick > 0:
+                    faded = f"vfadein{index}"
+                    filters.append(f"[{right}]fade=t=in:st=0:d={seconds(duration_tick)}[{faded}]")
+                    right = faded
+                filters.append(f"[{left}][{right}]concat=n=2:v=1:a=0[{out}]")
+                accumulated_tick += int(current.get("duration_tick") or 0)
+            current_video = out
+
+        for index, cue in enumerate(spec.get("subtitle_cues") or []):
+            text_value = str(cue.get("text") or "")
+            start_tick = int(cue.get("start_tick") or 0)
+            end_tick = int(cue.get("end_tick") or 0)
+            if not text_value or end_tick <= start_tick:
+                continue
+            out = f"vsub{index}"
+            filters.append(
+                f"[{current_video}]drawtext=text='{escape_drawtext(text_value)}':"
+                f"fontcolor=white:fontsize=36:x=(w-text_w)/2:y=h-120:"
+                f"box=1:boxcolor=black@0.4:boxborderw=8:"
+                f"enable='between(t,{seconds(start_tick)},{seconds(end_tick)})'[{out}]"
+            )
+            current_video = out
+
+        current_audio: str | None = None
+        audio_labels: list[str] = []
+        audio_input_offset = len(video_clips)
+        for index, clip in enumerate(audio_clips):
+            source_in = int(clip.get("source_in_tick") or 0)
+            duration = int(clip.get("duration_tick") or 0)
+            start = int(clip.get("timeline_start_tick") or 0)
+            if duration <= 0:
+                raise ValueError("Timeline audio clip duration must be positive")
+            gain_db = clip.get("gain_db")
+            gain = math.pow(10.0, float(gain_db) / 20.0) if gain_db is not None else 1.0
+            delay = max(0, millis(start))
+            label = f"a{index}"
+            filters.append(
+                f"[{audio_input_offset + index}:a]atrim=start={seconds(source_in)}:duration={seconds(duration)},"
+                f"asetpts=PTS-STARTPTS,adelay={delay}|{delay},volume={gain:.6f}[{label}]"
+            )
+            audio_labels.append(label)
+        if len(audio_labels) == 1:
+            current_audio = audio_labels[0]
+        elif len(audio_labels) > 1:
+            current_audio = "amixout"
+            filters.append(
+                "".join(f"[{label}]" for label in audio_labels)
+                + f"amix=inputs={len(audio_labels)}:duration=longest:dropout_transition=0:normalize=0[{current_audio}]"
+            )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [_FFMPEG_BIN, "-y", *input_args, "-filter_complex", ";".join(filters), "-map", f"[{current_video}]"]
+        if current_audio is not None:
+            cmd.extend(["-map", f"[{current_audio}]", "-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.append("-an")
+        cmd.extend([
+            "-c:v", "libx264", "-preset", "medium", "-crf", "21",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output_path),
+        ])
+        return self._run_ffmpeg(cmd, output_path)
+
+'''
+
+
+TIMELINE_WORKER_METHOD = '''    async def _run_timeline_composition(self, job_id: str, step: dict, output_dir: Path, fps: int, settings: dict, project_id: str = "") -> None:\n        step_id = step["id"]\n        self.repo.set_job_progress(job_id, "composition_compose", "", 0.7, "Compositing Timeline snapshot...")\n        from backend.timeline.runtime import load_verified_composition_spec\n        from backend.video.composer import VideoComposer, check_ffmpeg\n        spec = load_verified_composition_spec(self.repo, settings)\n        if spec is None:\n            raise RuntimeError("Timeline composition provenance is missing")\n        if not check_ffmpeg():\n            raise RuntimeError("FFmpeg is required for Timeline composition")\n        composer = VideoComposer(output_dir=str(output_dir))\n        final_path = output_dir / "composition" / "composite.mp4"\n        composer.compose_timeline(spec, final_path)\n        if not final_path.exists() or final_path.stat().st_size <= 0:\n            raise RuntimeError("Timeline composition produced empty output")\n        self.repo.set_job_progress(job_id, "composition_compose", "", 0.85, f"Timeline composition complete: {final_path}")\n        self._register_artifact(job_id, step_id, "composition", str(final_path), "")\n\n'''
+
+
+def main() -> None:
+    composer = Path("backend/video/composer.py")
+    text = composer.read_text(encoding="utf-8")
+    if "    def compose_timeline(self, spec: dict, output_path: Path) -> Path:\n" not in text:
+        marker = "    def compose_episode(\n"
+        if text.count(marker) != 1:
+            raise SystemExit(f"compose_episode marker count={text.count(marker)}")
+        composer.write_text(text.replace(marker, COMPOSE_TIMELINE + marker, 1), encoding="utf-8")
+
+    worker = Path("backend/orchestration/worker.py")
+    text = worker.read_text(encoding="utf-8")
+    old_dispatch = '        elif stage_key.startswith("composition_"):\n            await self._run_composition(job_id, step, output_dir, fps, settings, project_id)\n'
+    if old_dispatch in text:
+        new_dispatch = '        elif stage_key.startswith("composition_"):\n            timeline_settings = settings.get("timeline") or {}\n            if timeline_settings.get("source") == "timeline_snapshot":\n                await self._run_timeline_composition(job_id, step, output_dir, fps, settings, project_id)\n            else:\n                await self._run_composition(job_id, step, output_dir, fps, settings, project_id)\n'
+        text = text.replace(old_dispatch, new_dispatch, 1)
+    if "    async def _run_timeline_composition(" not in text:
+        marker = '    async def _run_composition(self, job_id: str, step: dict, output_dir: Path, fps: int, settings: dict, project_id: str = "") -> None:\n'
+        if text.count(marker) != 1:
+            raise SystemExit(f"worker composition marker count={text.count(marker)}")
+        text = text.replace(marker, TIMELINE_WORKER_METHOD + marker, 1)
+    worker.write_text(text, encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
