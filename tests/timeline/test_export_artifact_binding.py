@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -58,6 +57,17 @@ def _timeline_export_system(tmp_path):
     )
     with db.transaction(immediate=True) as conn:
         conn.execute("UPDATE jobs SET status=? WHERE id=?", (JobStatus.RUNNING.value, job_id))
+        conn.execute(
+            """INSERT INTO timelines
+               (id,project_id,name,timebase_hz,fps_num,fps_den,active_draft_id,latest_snapshot_no,created_at,updated_at)
+               VALUES ('timeline-a','project-a','Timeline',1000000,24,1,NULL,1,'now','now')"""
+        )
+        conn.execute(
+            """INSERT INTO timeline_snapshots
+               (id,timeline_id,snapshot_no,source_draft_revision,state_json,state_sha256,duration_tick,created_at)
+               VALUES ('snapshot-a','timeline-a',1,0,'{}',?,1000000,'now')""",
+            ("s" * 64,),
+        )
         conn.execute(
             """INSERT INTO timeline_composition_specs
                (id,snapshot_id,output_profile_json,compiler_version,spec_json,spec_sha256,created_at)
