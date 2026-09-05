@@ -4,6 +4,7 @@ import { ApiError, userMessage } from "@/api/client";
 import { timelineApi } from "@/api/timeline";
 import type {
   TimelineDraft,
+  TimelineExportResult,
   TimelineMutationResult,
   TimelineOperation,
   TimelineOutputProfile,
@@ -26,6 +27,7 @@ interface TimelineStore {
   snapshots: TimelineSnapshot[];
   selectedSnapshotId: string | null;
   qcBySnapshot: Record<string, TimelineQcStatus>;
+  exportBySnapshot: Record<string, TimelineExportResult>;
   loading: boolean;
   pendingSave: boolean;
   conflict: boolean;
@@ -38,7 +40,8 @@ interface TimelineStore {
   redo: () => Promise<void>;
   createSnapshot: () => Promise<TimelineSnapshot | null>;
   runQc: (snapshotId: string) => Promise<void>;
-  exportSnapshot: (snapshotId: string, profile: TimelineOutputProfile) => Promise<void>;
+  exportSnapshot: (snapshotId: string, profile: TimelineOutputProfile) => Promise<TimelineExportResult | null>;
+  selectSnapshot: (snapshotId: string) => void;
   clearConflict: () => void;
 }
 
@@ -56,6 +59,7 @@ function initialState() {
     snapshots: [] as TimelineSnapshot[],
     selectedSnapshotId: null as string | null,
     qcBySnapshot: {} as Record<string, TimelineQcStatus>,
+    exportBySnapshot: {} as Record<string, TimelineExportResult>,
     loading: false,
     pendingSave: false,
     conflict: false,
@@ -76,6 +80,18 @@ async function listSnapshotsOrEmpty(timelineId: string): Promise<TimelineSnapsho
   } catch {
     return [];
   }
+}
+
+async function loadQcStatuses(snapshots: TimelineSnapshot[]): Promise<Record<string, TimelineQcStatus>> {
+  const entries = await Promise.all(snapshots.map(async (snapshot) => {
+    try {
+      const status = await timelineApi.getQc(snapshot.id);
+      return [snapshot.id, status] as const;
+    } catch {
+      return [snapshot.id, { snapshot_id: snapshot.id, effective_status: "not_run", attempts: [] } satisfies TimelineQcStatus] as const;
+    }
+  }));
+  return Object.fromEntries(entries);
 }
 
 async function recoverRevisionConflict(timelineId: string) {
@@ -154,11 +170,14 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           const created = await timelineApi.initialize(projectId);
           if (generation !== loadGeneration || get().projectId !== projectId) return;
           const snapshots = await listSnapshotsOrEmpty(created.timeline_id);
+          const qcBySnapshot = await loadQcStatuses(snapshots);
           if (generation !== loadGeneration || get().projectId !== projectId) return;
           set({
             timelineId: created.timeline_id,
             draft: created,
             snapshots,
+            selectedSnapshotId: snapshots.length ? snapshots[snapshots.length - 1].id : null,
+            qcBySnapshot,
             loading: false,
             error: null,
           });
@@ -170,11 +189,14 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       const nextDraft = await timelineApi.getDraft(summary.timeline_id);
       if (generation !== loadGeneration || get().projectId !== projectId) return;
       const snapshots = await listSnapshotsOrEmpty(summary.timeline_id);
+      const qcBySnapshot = await loadQcStatuses(snapshots);
       if (generation !== loadGeneration || get().projectId !== projectId) return;
       set({
         timelineId: summary.timeline_id,
         draft: nextDraft,
         snapshots,
+        selectedSnapshotId: snapshots.length ? snapshots[snapshots.length - 1].id : null,
+        qcBySnapshot,
         loading: false,
         error: null,
       });
@@ -252,6 +274,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       set((state) => ({
         snapshots: [...state.snapshots.filter((item) => item.id !== snapshot.id), snapshot],
         selectedSnapshotId: snapshot.id,
+        qcBySnapshot: {
+          ...state.qcBySnapshot,
+          [snapshot.id]: { snapshot_id: snapshot.id, effective_status: "not_run", attempts: [] },
+        },
       }));
     }
     return snapshot;
@@ -266,9 +292,12 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
   exportSnapshot: async (snapshotId, profile) => {
     await flushPendingInternal();
-    await timelineApi.exportSnapshot(snapshotId, profile);
+    const result = await timelineApi.exportSnapshot(snapshotId, profile);
+    set((state) => ({ exportBySnapshot: { ...state.exportBySnapshot, [snapshotId]: result } }));
+    return result;
   },
 
+  selectSnapshot: (snapshotId) => set({ selectedSnapshotId: snapshotId }),
   clearConflict: () => set({ conflict: false, error: null }),
 }));
 
