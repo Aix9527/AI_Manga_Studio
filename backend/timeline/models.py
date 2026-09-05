@@ -115,6 +115,10 @@ class TimelineOperationRequest(BaseModel):
     operation: TimelineOperation
 
 
+class TimelineRevisionRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+
+
 class TimelineMutationResult(BaseModel):
     revision: int
     operation_seq: int
