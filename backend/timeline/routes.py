@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from pydantic import BaseModel
 
+from backend.timeline.compiler import TimelineOutputProfile
+from backend.timeline.export_service import TimelineExportBlocked, TimelineExportResult, TimelineExportService
 from backend.timeline.models import (
     TimelineDraftView,
     TimelineMutationResult,
@@ -28,6 +31,10 @@ from backend.timeline.media import TimelineMediaIntegrityError, TimelineMediaNot
 router = APIRouter(tags=["timeline"])
 
 
+class TimelineExportRequest(BaseModel):
+    output_profile: TimelineOutputProfile
+
+
 def _service(request: Request) -> TimelineService:
     return request.app.state.timeline_service
 
@@ -40,10 +47,7 @@ def _qc_service(request: Request) -> TimelineQcService:
 async def get_project_timeline(project_id: str, request: Request) -> TimelineSummary:
     timeline = _service(request).get_project_timeline(project_id)
     if timeline is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "TIMELINE_NOT_FOUND", "message": "Timeline does not exist for project"},
-        )
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": "Timeline does not exist for project"})
     return timeline
 
 
@@ -59,35 +63,19 @@ async def get_timeline_draft(timeline_id: str, request: Request) -> TimelineDraf
     try:
         return _service(request).get_draft(timeline_id)
     except TimelineNotFound as error:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)},
-        ) from error
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
 
 
 @router.post("/api/timelines/{timeline_id}/operations", response_model=TimelineMutationResult)
-async def apply_timeline_operation(
-    timeline_id: str,
-    value: TimelineOperationRequest,
-    request: Request,
-) -> TimelineMutationResult:
+async def apply_timeline_operation(timeline_id: str, value: TimelineOperationRequest, request: Request) -> TimelineMutationResult:
     try:
         return _service(request).apply_operation(timeline_id, value)
     except TimelineNotFound as error:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)},
-        ) from error
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
     except TimelineRevisionConflict as error:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "TIMELINE_REVISION_CONFLICT", "message": str(error)},
-        ) from error
+        raise HTTPException(status_code=409, detail={"code": "TIMELINE_REVISION_CONFLICT", "message": str(error)}) from error
     except TimelineValidationError as error:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "TIMELINE_VALIDATION_FAILED", "message": str(error)},
-        ) from error
+        raise HTTPException(status_code=422, detail={"code": "TIMELINE_VALIDATION_FAILED", "message": str(error)}) from error
 
 
 @router.post("/api/timelines/{timeline_id}/undo", response_model=TimelineMutationResult)
@@ -156,21 +144,24 @@ async def get_timeline_snapshot_qc(snapshot_id: str, request: Request) -> Timeli
         raise HTTPException(status_code=404, detail={"code": "TIMELINE_SNAPSHOT_NOT_FOUND", "message": str(error)}) from error
 
 
+@router.post("/api/timeline-snapshots/{snapshot_id}/export", response_model=TimelineExportResult)
+async def export_timeline_snapshot(snapshot_id: str, value: TimelineExportRequest, request: Request) -> TimelineExportResult:
+    service = TimelineExportService(_service(request).repo, request.app.state.job_service)
+    try:
+        return service.export(snapshot_id, value.output_profile)
+    except TimelineExportBlocked as error:
+        raise HTTPException(status_code=409, detail={"code": "TIMELINE_EXPORT_BLOCKED", "message": str(error)}) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={"code": "TIMELINE_EXPORT_INVALID", "message": str(error)}) from error
+
+
 @router.get("/api/timelines/{timeline_id}/artifacts/{artifact_id}/waveform", response_model=WaveformEnvelope)
-async def get_timeline_artifact_waveform(
-    timeline_id: str,
-    artifact_id: int,
-    request: Request,
-    bins: int = 512,
-) -> WaveformEnvelope:
+async def get_timeline_artifact_waveform(timeline_id: str, artifact_id: int, request: Request, bins: int = 512) -> WaveformEnvelope:
     service = _service(request)
     timeline = service.repo.get_timeline(timeline_id)
     if timeline is None:
         raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": "Timeline not found"})
-    waveform = WaveformService(
-        service.repo.db,
-        projects_root=service.repo.projects_root,
-    )
+    waveform = WaveformService(service.repo.db, projects_root=service.repo.projects_root)
     try:
         return waveform.get_or_build(str(timeline["project_id"]), artifact_id, bins=bins)
     except ValueError as error:
