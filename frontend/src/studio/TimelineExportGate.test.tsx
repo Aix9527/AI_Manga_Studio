@@ -6,15 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { workspaceApi } from "@/api/workspace";
 import TimelineQcWorkspace from "@/studio/TimelineQcWorkspace";
 import type { JobDetail } from "@/types/jobs";
+import type { TimelineDraft, TimelineQcStatus, TimelineSnapshot } from "@/types/timeline";
 
-const { mockedWorkspaceStore, state, actions } = vi.hoisted(() => {
+const { mockedWorkspaceStore, state, actions, timelineState, timelineActions, mockedTimelineStore } = vi.hoisted(() => {
   const workspaceState = {
     projectId: "project-a",
     snapshot: {
       project_id: "project-a",
       title: "归墟",
       source_path: "D:/projects/gui-xu/story.txt",
-      version: "v0.9",
+      version: "v0.10",
       progress: 0.95,
       pending_reviews: 0,
       active_jobs: 0,
@@ -23,6 +24,37 @@ const { mockedWorkspaceStore, state, actions } = vi.hoisted(() => {
       system_health: {},
     },
   };
+  const timelineActions = {
+    loadProject: vi.fn().mockResolvedValue(undefined),
+    scheduleOperation: vi.fn(),
+    commitCritical: vi.fn(),
+    flushPending: vi.fn().mockResolvedValue(undefined),
+    createSnapshot: vi.fn(),
+    runQc: vi.fn().mockResolvedValue(undefined),
+    exportSnapshot: vi.fn().mockResolvedValue({ snapshot_id: "snapshot-1", job_id: "timeline-job", status: "queued" }),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    clearConflict: vi.fn(),
+  };
+  const timelineState = {
+    projectId: "project-a",
+    timelineId: "timeline-a",
+    draft: null as TimelineDraft | null,
+    preflight: null,
+    snapshots: [] as TimelineSnapshot[],
+    selectedSnapshotId: null as string | null,
+    qcBySnapshot: {} as Record<string, TimelineQcStatus>,
+    exportBySnapshot: {},
+    loading: false,
+    pendingSave: false,
+    conflict: false,
+    error: null as string | null,
+    ...timelineActions,
+  };
+  const mockedTimelineStore = Object.assign(
+    (selector: (value: typeof timelineState) => unknown) => selector(timelineState),
+    { getState: () => timelineState },
+  );
   return {
     mockedWorkspaceStore: Object.assign(
       (selector: (value: typeof workspaceState) => unknown) => selector(workspaceState),
@@ -30,6 +62,9 @@ const { mockedWorkspaceStore, state, actions } = vi.hoisted(() => {
     ),
     state: { jobs: new Map<string, JobDetail>(), recentIds: [] as string[] },
     actions: { retryJob: vi.fn(), resumeJob: vi.fn(), reviewJob: vi.fn() },
+    timelineState,
+    timelineActions,
+    mockedTimelineStore,
   };
 });
 
@@ -38,9 +73,8 @@ vi.mock("@/state/jobStore", () => ({
   useJobStore: () => ({ jobs: state.jobs, recentIds: state.recentIds }),
   jobStoreActions: () => actions,
 }));
-vi.mock("@/api/workspace", () => ({
-  workspaceApi: { listAssets: vi.fn() },
-}));
+vi.mock("@/state/timelineStore", () => ({ useTimelineStore: mockedTimelineStore }));
+vi.mock("@/api/workspace", () => ({ workspaceApi: { listAssets: vi.fn() } }));
 
 const passedVideo = {
   id: 1,
@@ -63,6 +97,38 @@ const passedVideo = {
   created_at: "2026-09-05T00:00:00Z",
 };
 
+const draft: TimelineDraft = {
+  timeline_id: "timeline-a",
+  draft_id: "draft-a",
+  project_id: "project-a",
+  revision: 4,
+  timebase_hz: 1_000_000,
+  fps_num: 24,
+  fps_den: 1,
+  tracks: [
+    { id: "v1", track_type: "video", role: "video.main", name: "V1", sort_index: 0, locked: false, muted: false, hidden: false, clips: [] },
+    { id: "a1", track_type: "audio", role: "audio.dialogue", name: "A1", sort_index: 1, locked: false, muted: false, hidden: false, clips: [] },
+    { id: "a2", track_type: "audio", role: "audio.bgm", name: "A2", sort_index: 2, locked: false, muted: false, hidden: false, clips: [] },
+    { id: "s1", track_type: "subtitle", role: "subtitle.primary", name: "S1", sort_index: 3, locked: false, muted: false, hidden: false, clips: [] },
+  ],
+  subtitle_cues: [],
+  transitions: [],
+};
+
+const snapshot: TimelineSnapshot = {
+  id: "snapshot-1",
+  timeline_id: "timeline-a",
+  snapshot_no: 1,
+  source_draft_revision: 4,
+  state_sha256: "a".repeat(64),
+  duration_tick: 4_000_000,
+  created_at: "2026-09-05T00:00:00Z",
+};
+
+function qc(effective_status: TimelineQcStatus["effective_status"]): TimelineQcStatus {
+  return { snapshot_id: snapshot.id, effective_status, attempts: [] };
+}
+
 function job(status: JobDetail["status"], currentStage = "export"): JobDetail {
   return {
     id: "job-export",
@@ -83,62 +149,70 @@ function job(status: JobDetail["status"], currentStage = "export"): JobDetail {
   };
 }
 
-describe("TimelineQcWorkspace v0.9 export gate", () => {
+describe("TimelineQcWorkspace v0.10 export gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(workspaceApi.listAssets).mockResolvedValue([passedVideo]);
     state.jobs = new Map();
     state.recentIds = [];
+    timelineState.draft = draft;
+    timelineState.timelineId = "timeline-a";
+    timelineState.snapshots = [snapshot];
+    timelineState.selectedSnapshotId = snapshot.id;
+    timelineState.qcBySnapshot = {};
+    timelineState.pendingSave = false;
+    timelineState.error = null;
   });
 
   afterEach(cleanup);
 
-  it("retries the existing export-stage job instead of showing fake success", async () => {
+  it.each(["not_run", "failed", "stale"] as const)("disables Timeline export while Snapshot QC is %s", async (status) => {
+    timelineState.qcBySnapshot = { [snapshot.id]: qc(status) };
+    render(<TimelineQcWorkspace />);
+    await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
+
+    expect(screen.getByRole("button", { name: /导出 Snapshot/ })).toBeDisabled();
+    expect(actions.retryJob).not.toHaveBeenCalled();
+    expect(actions.resumeJob).not.toHaveBeenCalled();
+  });
+
+  it("exports only the selected passed Snapshot and never resumes unrelated production jobs", async () => {
     const user = userEvent.setup();
+    timelineState.qcBySnapshot = { [snapshot.id]: qc("passed") };
+    state.jobs = new Map([["job-export", job("retry_wait")]]);
+    state.recentIds = ["job-export"];
+
+    render(<TimelineQcWorkspace />);
+    await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
+    await user.click(screen.getByRole("button", { name: /导出 Snapshot/ }));
+
+    expect(timelineActions.exportSnapshot).toHaveBeenCalledWith(snapshot.id, {
+      width: 1080,
+      height: 1920,
+      fps_num: 24,
+      fps_den: 1,
+    });
+    expect(actions.retryJob).not.toHaveBeenCalled();
+    expect(actions.resumeJob).not.toHaveBeenCalled();
+  });
+
+  it("keeps the v0.9 compatible export path when the project has no Timeline", async () => {
+    const user = userEvent.setup();
+    timelineState.draft = null;
+    timelineState.timelineId = "";
+    timelineState.snapshots = [];
+    timelineState.selectedSnapshotId = null;
     state.jobs = new Map([["job-export", job("retry_wait")]]);
     state.recentIds = ["job-export"];
     actions.retryJob.mockResolvedValue(job("queued"));
 
     render(<TimelineQcWorkspace />);
     await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
-
-    const exportButton = screen.getByRole("button", { name: "恢复导出" });
-    expect(exportButton).toBeEnabled();
-    await user.click(exportButton);
+    const legacyButton = screen.getByRole("button", { name: "恢复导出" });
+    expect(legacyButton).toBeEnabled();
+    await user.click(legacyButton);
 
     expect(actions.retryJob).toHaveBeenCalledWith("job-export");
-    expect(await screen.findByRole("status")).toHaveTextContent("已恢复导出任务");
-  });
-
-  it("fails closed when any asset failed QC", async () => {
-    vi.mocked(workspaceApi.listAssets).mockResolvedValue([
-      passedVideo,
-      { ...passedVideo, id: 2, shot_id: "shot-02", quality_status: "failed" },
-    ]);
-    state.jobs = new Map([["job-export", job("retry_wait")]]);
-    state.recentIds = ["job-export"];
-
-    render(<TimelineQcWorkspace />);
-    await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
-
-    expect(screen.getByRole("button", { name: "恢复导出" })).toBeDisabled();
-    expect(screen.getByText(/存在未通过 QC 的资产/)).toBeInTheDocument();
-    expect(actions.retryJob).not.toHaveBeenCalled();
-  });
-
-  it("fails closed while any asset still has pending QC", async () => {
-    vi.mocked(workspaceApi.listAssets).mockResolvedValue([
-      passedVideo,
-      { ...passedVideo, id: 2, shot_id: "shot-02", quality_status: "unreviewed" },
-    ]);
-    state.jobs = new Map([["job-export", job("retry_wait")]]);
-    state.recentIds = ["job-export"];
-
-    render(<TimelineQcWorkspace />);
-    await waitFor(() => expect(workspaceApi.listAssets).toHaveBeenCalledWith("project-a"));
-
-    expect(screen.getByRole("button", { name: "恢复导出" })).toBeDisabled();
-    expect(screen.getByText(/仍有未完成 QC 的资产/)).toBeInTheDocument();
-    expect(actions.retryJob).not.toHaveBeenCalled();
+    expect(timelineActions.exportSnapshot).not.toHaveBeenCalled();
   });
 });
