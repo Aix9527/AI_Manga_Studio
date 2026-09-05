@@ -6,11 +6,13 @@ from backend.timeline.models import (
     TimelineDraftView,
     TimelineMutationResult,
     TimelineOperationRequest,
+    TimelineRevisionRequest,
     TimelineSummary,
 )
 from backend.timeline.service import (
     TimelineNotFound,
     TimelineRevisionConflict,
+    TimelineRedoUnavailable,
     TimelineService,
     TimelineValidationError,
 )
@@ -75,3 +77,27 @@ async def apply_timeline_operation(
             status_code=422,
             detail={"code": "TIMELINE_VALIDATION_FAILED", "message": str(error)},
         ) from error
+
+
+@router.post("/api/timelines/{timeline_id}/undo", response_model=TimelineMutationResult)
+async def undo_timeline_operation(timeline_id: str, value: TimelineRevisionRequest, request: Request) -> TimelineMutationResult:
+    try:
+        return _service(request).undo(timeline_id, expected_revision=value.expected_revision)
+    except TimelineRevisionConflict as error:
+        raise HTTPException(status_code=409, detail={"code": "TIMELINE_REVISION_CONFLICT", "message": str(error)}) from error
+    except TimelineNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
+    except TimelineValidationError as error:
+        raise HTTPException(status_code=422, detail={"code": "TIMELINE_HISTORY_UNAVAILABLE", "message": str(error)}) from error
+
+
+@router.post("/api/timelines/{timeline_id}/redo", response_model=TimelineMutationResult)
+async def redo_timeline_operation(timeline_id: str, value: TimelineRevisionRequest, request: Request) -> TimelineMutationResult:
+    try:
+        return _service(request).redo(timeline_id, expected_revision=value.expected_revision)
+    except TimelineRevisionConflict as error:
+        raise HTTPException(status_code=409, detail={"code": "TIMELINE_REVISION_CONFLICT", "message": str(error)}) from error
+    except TimelineNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
+    except (TimelineRedoUnavailable, TimelineValidationError) as error:
+        raise HTTPException(status_code=422, detail={"code": "TIMELINE_HISTORY_UNAVAILABLE", "message": str(error)}) from error
