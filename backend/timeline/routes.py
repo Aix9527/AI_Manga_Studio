@@ -6,10 +6,14 @@ from backend.timeline.models import (
     TimelineDraftView,
     TimelineMutationResult,
     TimelineOperationRequest,
+    TimelineQcRunView,
+    TimelineQcStatusView,
     TimelineRevisionRequest,
+    TimelineSnapshotView,
     TimelineSummary,
     WaveformEnvelope,
 )
+from backend.timeline.qc import TimelineQcNotFound, TimelineQcService
 from backend.timeline.waveform import WaveformService
 from backend.timeline.service import (
     TimelineNotFound,
@@ -18,6 +22,7 @@ from backend.timeline.service import (
     TimelineService,
     TimelineValidationError,
 )
+from backend.timeline.media import TimelineMediaIntegrityError, TimelineMediaNotFound
 
 
 router = APIRouter(tags=["timeline"])
@@ -25,6 +30,10 @@ router = APIRouter(tags=["timeline"])
 
 def _service(request: Request) -> TimelineService:
     return request.app.state.timeline_service
+
+
+def _qc_service(request: Request) -> TimelineQcService:
+    return TimelineQcService(_service(request).repo)
 
 
 @router.get("/api/projects/{project_id}/timeline", response_model=TimelineSummary)
@@ -103,6 +112,48 @@ async def redo_timeline_operation(timeline_id: str, value: TimelineRevisionReque
         raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
     except (TimelineRedoUnavailable, TimelineValidationError) as error:
         raise HTTPException(status_code=422, detail={"code": "TIMELINE_HISTORY_UNAVAILABLE", "message": str(error)}) from error
+
+
+@router.post("/api/timelines/{timeline_id}/snapshots", response_model=TimelineSnapshotView, status_code=201)
+async def create_timeline_snapshot(timeline_id: str, request: Request) -> TimelineSnapshotView:
+    try:
+        return _service(request).create_snapshot(timeline_id)
+    except TimelineNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
+    except (TimelineValidationError, TimelineMediaNotFound, TimelineMediaIntegrityError, ValueError) as error:
+        raise HTTPException(status_code=422, detail={"code": "TIMELINE_SNAPSHOT_INVALID", "message": str(error)}) from error
+
+
+@router.get("/api/timelines/{timeline_id}/snapshots", response_model=list[TimelineSnapshotView])
+async def list_timeline_snapshots(timeline_id: str, request: Request) -> list[TimelineSnapshotView]:
+    try:
+        return _service(request).list_snapshots(timeline_id)
+    except TimelineNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_NOT_FOUND", "message": str(error)}) from error
+
+
+@router.get("/api/timelines/{timeline_id}/snapshots/{snapshot_id}", response_model=TimelineSnapshotView)
+async def get_timeline_snapshot(timeline_id: str, snapshot_id: str, request: Request) -> TimelineSnapshotView:
+    try:
+        return _service(request).get_snapshot(timeline_id, snapshot_id)
+    except TimelineNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_SNAPSHOT_NOT_FOUND", "message": str(error)}) from error
+
+
+@router.post("/api/timeline-snapshots/{snapshot_id}/qc", response_model=TimelineQcRunView)
+async def run_timeline_snapshot_qc(snapshot_id: str, request: Request) -> TimelineQcRunView:
+    try:
+        return _qc_service(request).run(snapshot_id)
+    except TimelineQcNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_SNAPSHOT_NOT_FOUND", "message": str(error)}) from error
+
+
+@router.get("/api/timeline-snapshots/{snapshot_id}/qc", response_model=TimelineQcStatusView)
+async def get_timeline_snapshot_qc(snapshot_id: str, request: Request) -> TimelineQcStatusView:
+    try:
+        return _qc_service(request).get_status(snapshot_id)
+    except TimelineQcNotFound as error:
+        raise HTTPException(status_code=404, detail={"code": "TIMELINE_SNAPSHOT_NOT_FOUND", "message": str(error)}) from error
 
 
 @router.get("/api/timelines/{timeline_id}/artifacts/{artifact_id}/waveform", response_model=WaveformEnvelope)
