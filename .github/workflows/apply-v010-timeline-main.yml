@@ -1,0 +1,57 @@
+name: Apply v0.10 Timeline App Wiring
+
+on:
+  push:
+    branches:
+      - feat/v0.10-timeline-nle-persistence
+    paths:
+      - .github/workflows/apply-v010-timeline-main.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v0.10-timeline-nle-persistence
+      - name: Patch backend main
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('backend/main.py')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  'from backend.workspace.service import WorkspaceService\nfrom backend.workspace import routes as workspace_router\n',
+                  'from backend.workspace.service import WorkspaceService\nfrom backend.workspace import routes as workspace_router\nfrom backend.timeline.repository import TimelineRepository\nfrom backend.timeline.service import TimelineService\nfrom backend.timeline import routes as timeline_router\n',
+              ),
+              (
+                  '    workspace_service = WorkspaceService(\n        db, workspace_repo, project_scanner, broadcaster,\n        projects_root=projects_root, job_service=service,\n    )\n    task_queue = TaskQueue(root="storage/tasks")\n',
+                  '    workspace_service = WorkspaceService(\n        db, workspace_repo, project_scanner, broadcaster,\n        projects_root=projects_root, job_service=service,\n    )\n    timeline_repo = TimelineRepository(db, projects_root=projects_root)\n    timeline_service = TimelineService(timeline_repo)\n    task_queue = TaskQueue(root="storage/tasks")\n',
+              ),
+              (
+                  '    app.state.workspace_service = workspace_service\n    app.state.worker = worker\n',
+                  '    app.state.workspace_service = workspace_service\n    app.state.timeline_repo = timeline_repo\n    app.state.timeline_service = timeline_service\n    app.state.worker = worker\n',
+              ),
+              (
+                  '    app.include_router(projects_router.router)\n    app.include_router(workspace_router.router)\n',
+                  '    app.include_router(projects_router.router)\n    app.include_router(workspace_router.router)\n    app.include_router(timeline_router.router)\n',
+              ),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'expected main.py anchor not found: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit app wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/main.py
+          git diff --cached --check
+          git commit -m "feat(timeline): wire lifecycle service into app"
+          git push origin HEAD:feat/v0.10-timeline-nle-persistence
