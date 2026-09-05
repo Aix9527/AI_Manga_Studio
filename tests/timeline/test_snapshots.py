@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from backend.orchestration.database import OrchestrationDatabase
+from backend.timeline.models import TimelineOperationRequest
 from backend.timeline.repository import TimelineRepository
 from backend.timeline.service import TimelineService
 
@@ -73,10 +74,15 @@ def test_snapshot_payload_never_changes_after_draft_edit(tmp_path):
 
     service.apply_operation(
         draft.timeline_id,
-        {
-            "expected_revision": 0,
-            "operation": {"type": "TRIM_CLIP", "clip_id": draft.tracks[0].clips[0].id, "edge": "right", "target_source_tick": 1_000_000},
-        },
+        TimelineOperationRequest(
+            expected_revision=0,
+            operation={
+                "type": "TRIM_CLIP",
+                "clip_id": draft.tracks[0].clips[0].id,
+                "edge": "right",
+                "target_source_tick": 1_000_000,
+            },
+        ),
     )
 
     with db.connect() as conn:
