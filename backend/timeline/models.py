@@ -35,6 +35,28 @@ class TimelineTrackView(BaseModel):
     clips: list[TimelineClipView] = Field(default_factory=list)
 
 
+class TimelineSubtitleCueView(BaseModel):
+    id: str
+    track_id: str
+    clip_id: str | None = None
+    link_group_id: str | None = None
+    start_tick: int
+    end_tick: int
+    text: str
+    speaker: str = ""
+    style: dict[str, object] = Field(default_factory=dict)
+
+
+class TimelineTransitionView(BaseModel):
+    id: str
+    track_id: str
+    from_clip_id: str
+    to_clip_id: str
+    transition_type: str
+    duration_tick: int
+    params: dict[str, object] = Field(default_factory=dict)
+
+
 class TimelineDraftView(BaseModel):
     timeline_id: str
     draft_id: str
@@ -44,6 +66,8 @@ class TimelineDraftView(BaseModel):
     fps_num: int
     fps_den: int
     tracks: list[TimelineTrackView] = Field(default_factory=list)
+    subtitle_cues: list[TimelineSubtitleCueView] = Field(default_factory=list)
+    transitions: list[TimelineTransitionView] = Field(default_factory=list)
 
 
 class TimelineSummary(BaseModel):
@@ -99,13 +123,74 @@ class UnlinkClipsOperation(BaseModel):
     clip_ids: list[str] = Field(min_length=1)
 
 
+class AddTransitionOperation(BaseModel):
+    type: Literal["ADD_TRANSITION"]
+    from_clip_id: str
+    to_clip_id: str
+    transition_type: Literal["crossfade", "fade_to_black", "fade_from_black"]
+    duration_tick: int = Field(gt=0)
+    params: dict[str, object] = Field(default_factory=dict)
+
+
+class UpdateTransitionOperation(BaseModel):
+    type: Literal["UPDATE_TRANSITION"]
+    transition_id: str
+    duration_tick: int | None = Field(default=None, gt=0)
+    params: dict[str, object] | None = None
+
+
+class RemoveTransitionOperation(BaseModel):
+    type: Literal["REMOVE_TRANSITION"]
+    transition_id: str
+
+
+class AddSubtitleOperation(BaseModel):
+    type: Literal["ADD_SUBTITLE"]
+    track_id: str
+    start_tick: int = Field(ge=0)
+    end_tick: int = Field(ge=0)
+    text: str
+    speaker: str = ""
+    clip_id: str | None = None
+    link_group_id: str | None = None
+    style: dict[str, object] = Field(default_factory=dict)
+
+
+class UpdateSubtitleOperation(BaseModel):
+    type: Literal["UPDATE_SUBTITLE"]
+    cue_id: str
+    start_tick: int | None = Field(default=None, ge=0)
+    end_tick: int | None = Field(default=None, ge=0)
+    text: str | None = None
+    speaker: str | None = None
+    style: dict[str, object] | None = None
+
+
+class RemoveSubtitleOperation(BaseModel):
+    type: Literal["REMOVE_SUBTITLE"]
+    cue_id: str
+
+
+class ReplaceArtifactVersionOperation(BaseModel):
+    type: Literal["REPLACE_ARTIFACT_VERSION"]
+    clip_ids: list[str] = Field(min_length=1)
+    artifact_id: int = Field(gt=0)
+
+
 TimelineOperation = Annotated[
     MoveClipOperation
     | TrimClipOperation
     | SplitClipOperation
     | RemoveClipOperation
     | LinkClipsOperation
-    | UnlinkClipsOperation,
+    | UnlinkClipsOperation
+    | AddTransitionOperation
+    | UpdateTransitionOperation
+    | RemoveTransitionOperation
+    | AddSubtitleOperation
+    | UpdateSubtitleOperation
+    | RemoveSubtitleOperation
+    | ReplaceArtifactVersionOperation,
     Field(discriminator="type"),
 ]
 
@@ -124,3 +209,10 @@ class TimelineMutationResult(BaseModel):
     operation_seq: int
     draft: TimelineDraftView
     preflight: TimelinePreflight = Field(default_factory=TimelinePreflight)
+
+
+class WaveformEnvelope(BaseModel):
+    artifact_id: int
+    bins: int
+    peaks: list[float]
+    cache_path: str
