@@ -211,6 +211,32 @@ class TimelineMutationResult(BaseModel):
     preflight: TimelinePreflight = Field(default_factory=TimelinePreflight)
 
 
+class TimelineSnapshotView(BaseModel):
+    id: str
+    timeline_id: str
+    snapshot_no: int
+    source_draft_revision: int
+    state_sha256: str
+    duration_tick: int
+    created_at: str
+
+
+class TimelineQcRunView(BaseModel):
+    id: str
+    snapshot_id: str
+    attempt: int
+    status: Literal["running", "passed", "failed", "stale"]
+    report: dict[str, object] = Field(default_factory=dict)
+    started_at: str
+    completed_at: str | None = None
+
+
+class TimelineQcStatusView(BaseModel):
+    snapshot_id: str
+    effective_status: Literal["not_run", "running", "passed", "failed", "stale"]
+    attempts: list[TimelineQcRunView] = Field(default_factory=list)
+
+
 class WaveformEnvelope(BaseModel):
     artifact_id: int
     bins: int
