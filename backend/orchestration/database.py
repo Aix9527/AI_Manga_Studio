@@ -224,6 +224,226 @@ class OrchestrationDatabase:
             ON project_production_template_versions(project_id, version DESC);
         CREATE INDEX IF NOT EXISTS idx_project_template_status
             ON project_production_template_versions(project_id, status, version DESC);
+
+        CREATE TABLE IF NOT EXISTS timelines (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            timebase_hz INTEGER NOT NULL,
+            fps_num INTEGER NOT NULL,
+            fps_den INTEGER NOT NULL,
+            active_draft_id TEXT,
+            latest_snapshot_no INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timelines_project ON timelines(project_id);
+
+        CREATE TABLE IF NOT EXISTS timeline_drafts (
+            id TEXT PRIMARY KEY,
+            timeline_id TEXT NOT NULL REFERENCES timelines(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL,
+            base_snapshot_id TEXT,
+            head_operation_seq INTEGER NOT NULL DEFAULT 0,
+            redo_operation_seq INTEGER,
+            dirty INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_drafts_timeline
+            ON timeline_drafts(timeline_id, revision DESC);
+
+        CREATE TABLE IF NOT EXISTS timeline_tracks (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            track_type TEXT NOT NULL,
+            role TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sort_index INTEGER NOT NULL,
+            locked INTEGER NOT NULL DEFAULT 0,
+            muted INTEGER NOT NULL DEFAULT 0,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_tracks_draft
+            ON timeline_tracks(draft_id, sort_index, id);
+
+        CREATE TABLE IF NOT EXISTS timeline_link_groups (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            group_type TEXT NOT NULL,
+            anchor_clip_id TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_link_groups_draft
+            ON timeline_link_groups(draft_id, id);
+
+        CREATE TABLE IF NOT EXISTS timeline_clips (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
+            artifact_id INTEGER,
+            artifact_version INTEGER,
+            clip_type TEXT NOT NULL,
+            timeline_start_tick INTEGER NOT NULL,
+            duration_tick INTEGER NOT NULL,
+            source_in_tick INTEGER NOT NULL DEFAULT 0,
+            source_out_tick INTEGER NOT NULL,
+            link_group_id TEXT REFERENCES timeline_link_groups(id) ON DELETE SET NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            locked INTEGER NOT NULL DEFAULT 0,
+            gain_db REAL,
+            playback_rate_num INTEGER NOT NULL DEFAULT 1,
+            playback_rate_den INTEGER NOT NULL DEFAULT 1,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_clips_track
+            ON timeline_clips(draft_id, track_id, timeline_start_tick, id);
+        CREATE INDEX IF NOT EXISTS idx_timeline_clips_artifact
+            ON timeline_clips(artifact_id, artifact_version);
+        CREATE INDEX IF NOT EXISTS idx_timeline_clips_link_group
+            ON timeline_clips(link_group_id);
+
+        CREATE TABLE IF NOT EXISTS timeline_transitions (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
+            from_clip_id TEXT NOT NULL REFERENCES timeline_clips(id) ON DELETE CASCADE,
+            to_clip_id TEXT NOT NULL REFERENCES timeline_clips(id) ON DELETE CASCADE,
+            transition_type TEXT NOT NULL,
+            duration_tick INTEGER NOT NULL,
+            params_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_transitions_track
+            ON timeline_transitions(draft_id, track_id, from_clip_id, to_clip_id);
+
+        CREATE TABLE IF NOT EXISTS timeline_subtitle_cues (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
+            clip_id TEXT REFERENCES timeline_clips(id) ON DELETE SET NULL,
+            link_group_id TEXT REFERENCES timeline_link_groups(id) ON DELETE SET NULL,
+            start_tick INTEGER NOT NULL,
+            end_tick INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            speaker TEXT NOT NULL DEFAULT '',
+            style_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_subtitle_cues_track
+            ON timeline_subtitle_cues(draft_id, track_id, start_tick, id);
+
+        CREATE TABLE IF NOT EXISTS timeline_operations (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL,
+            operation_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            inverse_json TEXT NOT NULL,
+            branch_state TEXT NOT NULL DEFAULT 'active',
+            actor TEXT NOT NULL DEFAULT 'user',
+            created_at TEXT NOT NULL,
+            UNIQUE(draft_id, seq)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_operations_history
+            ON timeline_operations(draft_id, branch_state, seq);
+
+        CREATE TABLE IF NOT EXISTS timeline_checkpoints (
+            id TEXT PRIMARY KEY,
+            draft_id TEXT NOT NULL REFERENCES timeline_drafts(id) ON DELETE CASCADE,
+            operation_seq INTEGER NOT NULL,
+            revision INTEGER NOT NULL,
+            state_json TEXT NOT NULL,
+            state_sha256 TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_checkpoints_draft
+            ON timeline_checkpoints(draft_id, operation_seq DESC);
+
+        CREATE TABLE IF NOT EXISTS timeline_snapshots (
+            id TEXT PRIMARY KEY,
+            timeline_id TEXT NOT NULL REFERENCES timelines(id) ON DELETE CASCADE,
+            snapshot_no INTEGER NOT NULL,
+            source_draft_revision INTEGER NOT NULL,
+            state_json TEXT NOT NULL,
+            state_sha256 TEXT NOT NULL,
+            duration_tick INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(timeline_id, snapshot_no)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_snapshots_timeline
+            ON timeline_snapshots(timeline_id, snapshot_no DESC);
+
+        CREATE TABLE IF NOT EXISTS timeline_snapshot_qc_runs (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL REFERENCES timeline_snapshots(id) ON DELETE CASCADE,
+            attempt INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            report_json TEXT NOT NULL DEFAULT '{}',
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(snapshot_id, attempt)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_snapshot_qc_runs_latest
+            ON timeline_snapshot_qc_runs(snapshot_id, attempt DESC);
+
+        CREATE TABLE IF NOT EXISTS timeline_composition_specs (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL REFERENCES timeline_snapshots(id) ON DELETE CASCADE,
+            output_profile_json TEXT NOT NULL,
+            compiler_version TEXT NOT NULL,
+            spec_json TEXT NOT NULL,
+            spec_sha256 TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(snapshot_id, spec_sha256)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_composition_specs_snapshot
+            ON timeline_composition_specs(snapshot_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS timeline_export_bindings (
+            id TEXT PRIMARY KEY,
+            composition_spec_id TEXT NOT NULL REFERENCES timeline_composition_specs(id) ON DELETE CASCADE,
+            job_id TEXT NOT NULL,
+            artifact_id INTEGER,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_timeline_export_bindings_spec
+            ON timeline_export_bindings(composition_spec_id, status, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_timeline_export_bindings_job
+            ON timeline_export_bindings(job_id);
+
+        CREATE TRIGGER IF NOT EXISTS trg_timeline_snapshot_immutable
+        BEFORE UPDATE ON timeline_snapshots
+        BEGIN
+            SELECT RAISE(ABORT, 'immutable timeline snapshot');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_timeline_composition_spec_immutable
+        BEFORE UPDATE ON timeline_composition_specs
+        BEGIN
+            SELECT RAISE(ABORT, 'immutable timeline composition spec');
+        END;
         """
 
     @contextmanager
