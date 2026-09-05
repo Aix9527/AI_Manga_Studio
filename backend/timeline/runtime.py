@@ -4,8 +4,12 @@ import hashlib
 import json
 
 
-class TimelineRuntimeIntegrityError(ValueError):
+class TimelineCompositionIntegrityError(ValueError):
     pass
+
+
+# Backward-compatible name for any earlier internal callers.
+TimelineRuntimeIntegrityError = TimelineCompositionIntegrityError
 
 
 def load_timeline_composition_spec(db, composition_spec_id: str, *, expected_sha256: str = "") -> dict:
@@ -14,18 +18,33 @@ def load_timeline_composition_spec(db, composition_spec_id: str, *, expected_sha
             "SELECT * FROM timeline_composition_specs WHERE id=?", (composition_spec_id,)
         ).fetchone()
     if row is None:
-        raise TimelineRuntimeIntegrityError(f"Timeline composition spec not found: {composition_spec_id}")
+        raise TimelineCompositionIntegrityError(f"Timeline composition spec not found: {composition_spec_id}")
     payload = str(row["spec_json"])
     actual = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     stored = str(row["spec_sha256"])
     if actual != stored:
-        raise TimelineRuntimeIntegrityError("Timeline composition spec SHA does not match stored payload")
+        raise TimelineCompositionIntegrityError("Timeline composition spec SHA does not match stored payload")
     if expected_sha256 and stored != expected_sha256:
-        raise TimelineRuntimeIntegrityError("Timeline composition spec SHA does not match Job provenance")
+        raise TimelineCompositionIntegrityError("Timeline composition spec SHA does not match Job provenance")
     spec = json.loads(payload)
     if spec.get("schema_version") != 1 or spec.get("compiler_version") != "timeline-compose/v1":
-        raise TimelineRuntimeIntegrityError("Unsupported Timeline composition spec version")
+        raise TimelineCompositionIntegrityError("Unsupported Timeline composition spec version")
     return spec
+
+
+def load_verified_composition_spec(repo, settings: dict) -> dict | None:
+    timeline = settings.get("timeline") or {}
+    if timeline.get("source") != "timeline_snapshot":
+        return None
+    composition_spec_id = str(timeline.get("composition_spec_id") or "")
+    expected_sha256 = str(timeline.get("composition_spec_sha256") or "")
+    if not composition_spec_id or not expected_sha256:
+        raise TimelineCompositionIntegrityError("Timeline composition provenance is incomplete")
+    return load_timeline_composition_spec(
+        repo.db,
+        composition_spec_id,
+        expected_sha256=expected_sha256,
+    )
 
 
 def record_timeline_export_artifact(db, job_id: str, artifact_id: int) -> None:
